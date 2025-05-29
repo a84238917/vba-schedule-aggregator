@@ -7,6 +7,7 @@ Public Sub ExtractDataMain()
     Dim wbThis As Workbook ' このマクロが記述されているワークブック
     Dim startTime As Double ' 処理開始時刻
     Dim endTime As Double   ' 処理終了時刻
+    Dim errNum As Long, errDesc As String, errSource As String ' GlobalErrorHandler_M01 で使用
 
     On Error GoTo GlobalErrorHandler_M01
     Application.ScreenUpdating = False
@@ -23,7 +24,21 @@ Public Sub ExtractDataMain()
     ' Call M02_ConfigReader.LoadConfiguration(g_configSettings, wbThis.Worksheets(CONFIG_SHEET_DEFAULT_NAME))
 
     ' --- 2. 各種シート準備フェーズ ---
-    ' Call M03_SheetManager.PrepareSheets(wbThis, g_configSettings, g_errorLogWorksheet, g_nextErrorLogRow)
+    ' M03_SheetManager.PrepareSheets はグローバル変数 g_errorLogWorksheet と g_nextErrorLogRow を設定します。
+    If Not M03_SheetManager.PrepareSheets(g_configSettings, wbThis) Then
+        ' SafeWriteErrorLogの呼び出しには、既に存在するg_configSettingsからシート名を取得する
+        ' ただし、g_configSettings自体が未初期化の可能性は極めて低い（InitializeConfigStructureが先のため）
+        ' ここではconfigが最低限読み込めている前提でエラーログシート名をg_configSettingsから取得
+        Dim tempErrorLogName As String
+        If Not g_configSettings.ErrorLogSheetName = "" Then
+            tempErrorLogName = g_configSettings.ErrorLogSheetName
+        Else
+            tempErrorLogName = "エラーログ(デフォルト)" ' Fallback name
+        End If
+        Call SafeWriteErrorLog(wbThis, tempErrorLogName, "M01_MainControl", "ExtractDataMain", "ログシート準備失敗", 0, "M03_SheetManager.PrepareSheetsがFalseを返しました")
+        MsgBox "ログシートの準備に失敗しました。処理を中断します。", vbCritical, "初期化エラー"
+        GoTo FinalizeMacro_M01
+    End If
 
     ' --- 3. 処理対象ファイル特定フェーズ ---
     ' Call M05_FileProcessor.GetTargetFiles(g_configSettings)
@@ -32,7 +47,8 @@ Public Sub ExtractDataMain()
     ' Call M03_SheetManager.PrepareOutputSheet(wbThis, g_configSettings)
 
     ' --- 5. 検索条件ログ出力フェーズ ---
-    ' Call M04_LogWriter.WriteFilterLog(wbThis.Worksheets(g_configSettings.SearchConditionLogSheetName), g_configSettings)
+    ' ログシートが正常に準備された後に、検索条件ログを書き込みます。
+    Call M04_LogWriter.WriteFilterLog(g_configSettings, wbThis)
 
     ' --- 6. メインループフェーズ (ファイルごとのデータ抽出処理) ---
     ' Dim targetFile As Variant
@@ -52,12 +68,28 @@ FinalizeMacro_M01:
     Exit Sub
 
 GlobalErrorHandler_M01:
-    Dim errNum As Long, errDesc As String, errSource As String
     errNum = Err.Number
     errDesc = Err.Description
     errSource = Err.Source
-    If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M01_MainControl.ExtractDataMain - Error " & errNum & ": " & errDesc & " (Source: " & errSource & ")"
-    ' Call M04_LogWriter.WriteErrorLog(g_errorLogWorksheet, g_nextErrorLogRow, "M01_MainControl", "ExtractDataMain", errNum, errDesc)
+    If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M01_MainControl.ExtractDataMain (GlobalErrorHandler_M01) - Error " & errNum & ": " & errDesc & " (Source: " & errSource & ")"
+    
+    ' エラー情報をログに記録
+    If g_errorLogWorksheet Is Nothing Then
+        ' g_errorLogWorksheetが未設定の場合 (PrepareSheetsより前、または失敗時) はSafeWriteErrorLogを試みる
+        Dim errorSheetNameAttempt As String
+        ' g_configSettings は InitializeConfigStructure で初期化されているため Nothing にはならない。
+        ' ErrorLogSheetName が空文字列の可能性はある。
+        If Not g_configSettings.ErrorLogSheetName = "" Then
+            errorSheetNameAttempt = g_configSettings.ErrorLogSheetName
+        Else
+            errorSheetNameAttempt = "エラーログ(M01エラーハンドラ)" ' より明確なフォールバック名
+        End If
+        Call SafeWriteErrorLog(wbThis, errorSheetNameAttempt, "M01_MainControl", "ExtractDataMain (GlobalErrorHandler_M01)", "エラー発生 (エラーログシート準備前または失敗): " & errSource, errNum, errDesc)
+    Else
+        ' g_errorLogWorksheetが設定されていれば通常のWriteErrorLogを使用
+        Call WriteErrorLog("M01_MainControl", "ExtractDataMain (GlobalErrorHandler_M01)", errSource, errNum, errDesc, "処理中断")
+    End If
+    
     MsgBox "エラーが発生しました。" & vbCrLf & _
            "エラー番号: " & errNum & vbCrLf & _
            "内容: " & errDesc & vbCrLf & _
