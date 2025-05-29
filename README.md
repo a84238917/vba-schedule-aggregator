@@ -26,34 +26,36 @@
 このリポジトリは以下の構成になっています。
 
 ```
-vba-schedule-aggregator/
-├── .gitignore                         # Gitの追跡から除外するファイルやフォルダを指定します。
-├── README.md                          # このファイルです。プロジェクトの概要、セットアップ方法、使用方法などを記述します。
+vba-schedule-aggregator/               # リポジトリルート
+├── .gitignore                         # Gitで追跡しないファイルを指定 (例: *.~*, Thumbs.db, /~$*.xlsm)
+├── README.md                          # プロジェクトの説明、セットアップ、使用方法、フォルダ構成解説など (上記提案内容)
 │
-├── src/                               # VBAマクロのソースコード関連ファイルを格納します。
-│   └── schedule_extractor.xlsm        # マクロ本体が含まれるExcelファイル。ユーザーはこのファイルを開いてマクロを実行します。
+├── src/                               # ソースコード (VBAマクロ本体)
+│   └── schedule_extractor.xlsm        # マクロが含まれるExcelファイル (これがユーザーが使用するファイル)
 │
-├── docs/                              # マクロの設計や仕様に関するドキュメントを格納します。
-│   ├── 01_System_Instructions.md      # (AI向け)マクロ生成時の全体的な指示や開発原則。
-│   ├── 02_Prompt_for_AI.md            # (AI向け)マクロ生成を依頼する際の具体的なプロンプト。
-│   ├── 03_Specification.md            # マクロの機能仕様書。
-│   ├── 04_Config_Sheet_Definition.md  # 「Config」シートの各設定項目の詳細な定義。
-│   ├── 05_Expected_Behavior.md        # マクロに期待される具体的な動作フロー。
-│   └── 06_Development_Considerations.md # (AI向け)その他考慮事項や開発上の補足情報。
+├── docs/                              # ドキュメント類 (マクロの設計・仕様に関する資料)
+│   ├── 00_Project_Overview.md         # (任意) プロジェクト全体の目的や背景を簡潔にまとめたもの
+│   ├── 01_System_Instructions_for_AI.md # AIへの役割指示や開発原則
+│   ├── 02_Prompt_for_AI.md            # AIにマクロ生成を依頼する際の具体的なプロンプト
+│   ├── 03_Functional_Specification.md # マクロの機能仕様書
+│   ├── 04_Config_Sheet_Definition.md  # 「Config」シートの各設定項目の詳細な定義と説明
+│   ├── 05_Expected_Behavior.md        # マクロに期待される具体的な動作フロー、ステップバイステップの説明
+│   └── 06_Development_Notes_and_Considerations.md # 開発上の注意点、AIへの補足事項、過去の課題など
 │
-└── samples/                           # マクロの使用例やテストに使用するサンプルデータ・ファイルを格納します。
-    ├── config_examples/               # Configシートの設定例。
-    │   └── config_sheet_example.xlsx  # 設定例が入力されたConfigシートを含むExcelファイル（またはCSV）。
+└── samples/                                 # マクロのテストやデモンストレーションに使用するサンプルファイル群
+    ├── examples_config_sheet/               # Configシートの設定例
+    │   └── config_settings_example.csv      # 具体的な設定値が入力されたConfigシートをcsvへ変更したもの
     │
-    ├── input_schedule_files/          # 処理対象となる工程表Excelファイルのサンプル。
-    │   ├── schedule_pattern_A_example.xlsx # 工程パターンAのサンプル工程表。
-    │   └── schedule_pattern_B_example.xlsx # 工程パターンBのサンプル工程表。
+    ├── examples_work_sheet/                 # (Workシートを使用する場合) Workシートのデータ構造とサンプル
+    │   └── work_sheet_sample_data.csv
     │
-    ├── output_examples/               # マクロによる抽出結果のサンプル。
-    │   └── extracted_data_example.csv   # 「一覧」シートに出力されるデータのCSV形式サンプル。
+    ├── input_schedule_data_examples/                      # 具体的なデータが入った処理対象工程表のサンプル
+    │   ├── monthly_schedule_202504_pA.xlsx                # 2025年4月、パターンAの工程表サンプルExcel
+    │   ├── monthly_schedule_202504_pA_data.csv            # 2025年4月、パターンAの工程表サンプルcsvへ変更したもの
+    │   └── monthly_schedule_202504_pA_data_screenshot.png # 2025年5月、パターンBの工程表サンプルスクリーンショット
     │
-    └── work_sheet_examples/           # (もし使用する場合) Workシートのデータ構造とサンプル。
-        └── work_sheet_data_example.csv
+    └── output_data_examples/            # マクロによる抽出結果（「一覧」シートの内容）のサンプル
+        └── extracted_data_sample.csv    # 抽出結果のCSV形式サンプル
 
 ```
 
@@ -108,44 +110,6 @@ vba-schedule-aggregator/
     *   エラーハンドリングを適切に行い、堅牢性を高めます。
     *   レイトバインディングを基本とし、外部参照設定を極力不要にします。
 
-
-## フォルダ名・ファイル名・ディレクトリ構成の提案 (修正版)
-
-提示いただいた構成案は非常に良いので、それをベースに少しだけファイル名やフォルダ名を調整し、役割を明確化しました。特に `docs` フォルダ内のAI向けドキュメントに連番を振ることで、参照順序を示唆できるようにしています。
-
-```
-vba-schedule-aggregator/               # リポジトリルート
-├── .gitignore                         # Gitで追跡しないファイルを指定 (例: *.~*, Thumbs.db, /~$*.xlsm)
-├── README.md                          # プロジェクトの説明、セットアップ、使用方法、フォルダ構成解説など (上記提案内容)
-│
-├── src/                               # ソースコード (VBAマクロ本体)
-│   └── schedule_extractor.xlsm        # マクロが含まれるExcelファイル (これがユーザーが使用するファイル)
-│
-├── docs/                              # ドキュメント類 (マクロの設計・仕様に関する資料)
-│   ├── 00_Project_Overview.md         # (任意) プロジェクト全体の目的や背景を簡潔にまとめたもの
-│   ├── 01_System_Instructions_for_AI.md # AIへの役割指示や開発原則
-│   ├── 02_Prompt_for_AI.md            # AIにマクロ生成を依頼する際の具体的なプロンプト
-│   ├── 03_Functional_Specification.md # マクロの機能仕様書
-│   ├── 04_Config_Sheet_Definition.md  # 「Config」シートの各設定項目の詳細な定義と説明
-│   ├── 05_Expected_Behavior.md        # マクロに期待される具体的な動作フロー、ステップバイステップの説明
-│   └── 06_Development_Notes_and_Considerations.md # 開発上の注意点、AIへの補足事項、過去の課題など
-│
-└── samples/                                 # マクロのテストやデモンストレーションに使用するサンプルファイル群
-    ├── examples_config_sheet/               # Configシートの設定例
-    │   └── config_settings_example.csv      # 具体的な設定値が入力されたConfigシートをcsvへ変更したもの
-    │
-    ├── examples_work_sheet/                 # (Workシートを使用する場合) Workシートのデータ構造とサンプル
-    │   └── work_sheet_sample_data.csv
-    │
-    ├── input_schedule_data_examples/                      # 具体的なデータが入った処理対象工程表のサンプル
-    │   ├── monthly_schedule_202504_pA.xlsx                # 2025年4月、パターンAの工程表サンプルExcel
-    │   ├── monthly_schedule_202504_pA_data.csv            # 2025年4月、パターンAの工程表サンプルcsvへ変更したもの
-    │   └── monthly_schedule_202504_pA_data_screenshot.png # 2025年5月、パターンBの工程表サンプルスクリーンショット
-    │
-    └── output_data_examples/            # マクロによる抽出結果（「一覧」シートの内容）のサンプル
-        └── extracted_data_sample.csv    # 抽出結果のCSV形式サンプル
-
-```
 
 **変更点と理由:**
 
