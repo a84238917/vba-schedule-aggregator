@@ -9,6 +9,12 @@ Public Sub ExtractDataMain()
     Dim endTime As Double   ' 処理終了時刻
     ' Dim wsConfig As Worksheet ' No longer needed here, LoadConfiguration handles it.
     Dim errNum As Long, errDesc As String, errSource As String ' Error handler variables - ensure these are at Sub level
+    Dim targetFiles As Collection
+    Dim procFile As Variant
+    Dim fileIdx As Long
+    Dim extractedTotal As Long
+    Dim wsResultOutput As Worksheet ' For future output sheet, pass Nothing for now
+    Dim nextOutputRow As Long     ' For future output row, pass 0 for now
 
     On Error GoTo GlobalErrorHandler_M01
     Application.ScreenUpdating = False
@@ -34,6 +40,13 @@ Public Sub ExtractDataMain()
     ' デバッグモードがONの場合、イミディエイトウィンドウに「マクロ実行開始。初期化処理・Config読み込み完了。」といったログを出力。
     If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG: M01_MainControl.ExtractDataMain - マクロ実行開始。初期化処理・Config読み込み完了。"
 
+    ' Initialize Collection and related variables for file processing
+    Set targetFiles = New Collection
+    fileIdx = 0
+    extractedTotal = 0
+    Set wsResultOutput = Nothing ' Explicitly Nothing for this step
+    nextOutputRow = 0          ' Explicitly 0 for this step
+
     ' --- 2. 各種シート準備フェーズ ---
     If Not M03_SheetManager.PrepareSheets(g_configSettings, wbThis) Then
         ' PrepareSheetsが失敗した場合でも、LoadConfigurationでErrorLogSheetNameは読み込めているはず
@@ -42,23 +55,41 @@ Public Sub ExtractDataMain()
         GoTo FinalizeMacro_M01
     End If
 
-    ' --- 3. 処理対象ファイル特定フェーズ ---
-    ' Call M05_FileProcessor.GetTargetFiles(g_configSettings)
-
     ' --- 4. 出力/ログ準備フェーズ ---
-    ' Call M03_SheetManager.PrepareOutputSheet(wbThis, g_configSettings)
+    ' Call M03_SheetManager.PrepareOutputSheet(wbThis, g_configSettings) ' This remains a stub for now
 
     ' --- 5. 検索条件ログ出力フェーズ ---
     ' ログシートが正常に準備された後に、検索条件ログを書き込みます。
     Call M04_LogWriter.WriteFilterLog(g_configSettings, wbThis)
 
-    ' --- 6. メインループフェーズ (ファイルごとのデータ抽出処理) ---
-    ' Dim targetFile As Variant
-    ' For Each targetFile In g_configSettings.TargetFileFolderPaths
-    '     If LogMain_IsArrayInitialized(g_configSettings.TargetFileFolderPaths) Then '念のため実行前に確認
-    '         Call M06_DataExtractor.ExtractDataFromFile(CStr(targetFile), g_configSettings, wbThis.Worksheets(g_configSettings.OutputSheetName))
-    '     End If
-    ' Next targetFile
+    ' --- 3. 処理対象ファイル特定フェーズ & 6. メインループフェーズ ---
+    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M01_MainControl.ExtractDataMain - Starting file processing phase."
+
+    If M05_FileProcessor.GetTargetFiles(g_configSettings, targetFiles) Then
+        If targetFiles.Count > 0 Then
+            If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG: M01_MainControl.ExtractDataMain - " & targetFiles.Count & " target file(s) identified."
+            For Each procFile In targetFiles
+                fileIdx = fileIdx + 1
+                If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG: M01_MainControl.ExtractDataMain - Processing file " & fileIdx & " of " & targetFiles.Count & ": '" & CStr(procFile) & "'"
+                
+                ' M06_DataExtractor.ExtractDataFromFile呼び出し
+                ' Optional引数 wsOutput, outputNextRow, currentFileNum, totalExtractedCount を渡す
+                If M06_DataExtractor.ExtractDataFromFile(CStr(procFile), g_configSettings, wsResultOutput, nextOutputRow, fileIdx, extractedTotal) Then
+                    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M01_MainControl.ExtractDataMain - Successfully processed (ExtractDataFromFile returned True) for: '" & CStr(procFile) & "'"
+                Else
+                    If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M01_MainControl.ExtractDataMain - Failed to process (ExtractDataFromFile returned False) for: '" & CStr(procFile) & "'"
+                    ' エラーはM06内でSafeWriteErrorLogを使って記録されているはずなので、ここでは詳細なエラーログは不要
+                End If
+            Next procFile
+            If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG: M01_MainControl.ExtractDataMain - Finished processing all " & targetFiles.Count & " file(s)."
+        Else
+            If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG: M01_MainControl.ExtractDataMain - No target files found by GetTargetFiles."
+            MsgBox "処理対象ファイルが見つかりませんでした。ConfigシートP557の設定を確認してください。", vbInformation, "処理対象なし"
+        End If
+    Else
+        If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M01_MainControl.ExtractDataMain - M05_FileProcessor.GetTargetFiles returned False. See error log for details."
+        MsgBox "処理対象ファイルの特定処理でエラーが発生しました。エラーログを確認してください。", vbExclamation, "ファイル特定エラー"
+    End If
 
 FinalizeMacro_M01:
     On Error Resume Next ' 終了処理中のエラーは無視

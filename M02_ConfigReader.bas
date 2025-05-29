@@ -195,6 +195,80 @@ NotAnArrayOrNotInitialized:
     ConfigReader_IsArrayInitialized = False
 End Function
 
+Private Sub LoadProcessDetailsLimited(ByRef configS As tConfigSettings, srcSheet As Worksheet, ByRef errFlag As Boolean, wbLog As Workbook, errLogName As String)
+    ' 「Config」シートのJ列(管内1)、K列(管内2)からパターン"1"に対応する情報を読み込みます。(ステップ4限定)
+    ' デバッグモード時は、L列(分類1)、M列(分類2)、N列(分類3)も読み込んでログ出力します。
+    ' 引数:
+    '   configS: (I/O) tConfigSettings型。読み込んだ設定が格納されます。
+    '   srcSheet: (I) Worksheet型。読み込み元のConfigシートオブジェクト。
+    '   errFlag: (I/O) Boolean型。エラー発生時にTrueに設定されます。
+    '   wbLog: (I) Workbook型。エラーログ書き込み用のワークブック。
+    '   errLogName: (I) String型。エラーログシート名。
+
+    Dim i As Long
+    Dim valJ As Variant, valK As Variant
+    Dim valL As Variant, valM As Variant, valN As Variant ' For debug logging only
+
+    If configS.ProcessesPerDay <= 0 Then Exit Sub ' Should not happen if validation in LoadConfiguration is correct
+
+    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadProcessDetailsLimited - Reading J, K" & IIf(configS.DebugModeFlag, ", L, M, N", "") & " cols from row 129 for " & configS.ProcessesPerDay & " processes."
+
+    For i = 0 To configS.ProcessesPerDay - 1
+        ' Kankatsu1 (J column)
+        valJ = GetCellValue(srcSheet, "J" & (129 + i), "LoadProcessDetailsLimited", errFlag, "管内1 (J" & (129 + i) & ")", wbLog, errLogName, False, "String")
+        If errFlag Then Exit For ' Stop if GetCellValue reported a fatal error
+        configS.ProcessDetails(i).Kankatsu1 = CStr(valJ)
+
+        ' Kankatsu2 (K column)
+        valK = GetCellValue(srcSheet, "K" & (129 + i), "LoadProcessDetailsLimited", errFlag, "管内2 (K" & (129 + i) & ")", wbLog, errLogName, False, "String")
+        If errFlag Then Exit For
+        configS.ProcessDetails(i).Kankatsu2 = CStr(valK)
+
+        If configS.DebugModeFlag Then ' Only read and log Bunrui if DebugMode is ON
+            valL = GetCellValue(srcSheet, "L" & (129 + i), "LoadProcessDetailsLimited", errFlag, "分類1 (L" & (129 + i) & ") for debug", wbLog, errLogName, False, "String")
+            If errFlag Then Exit For
+            valM = GetCellValue(srcSheet, "M" & (129 + i), "LoadProcessDetailsLimited", errFlag, "分類2 (M" & (129 + i) & ") for debug", wbLog, errLogName, False, "String")
+            If errFlag Then Exit For
+            valN = GetCellValue(srcSheet, "N" & (129 + i), "LoadProcessDetailsLimited", errFlag, "分類3 (N" & (129 + i) & ") for debug", wbLog, errLogName, False, "String")
+            If errFlag Then Exit For
+            Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG_DETAIL:   Process " & i & ": Kankatsu1='" & CStr(valJ) & "', Kankatsu2='" & CStr(valK) & "', Bunrui1='" & CStr(valL) & "', Bunrui2='" & CStr(valM) & "', Bunrui3='" & CStr(valN) & "'"
+        End If
+    Next i
+End Sub
+
+Private Sub LoadProcessPatternColNumbersLimited(ByRef configS As tConfigSettings, srcSheet As Worksheet, ByRef errFlag As Boolean, wbLog As Workbook, errLogName As String)
+    ' 「Config」シートのO列からパターン"1"に対応する工程列数を読み込みます。(ステップ4限定)
+    ' Arguments:
+    '   configS: (I/O) tConfigSettings型。読み込んだ設定が格納されます。
+    '   srcSheet: (I) Worksheet型。読み込み元のConfigシートオブジェクト。
+    '   errFlag: (I/O) Boolean型。エラー発生時にTrueに設定されます。
+    '   wbLog: (I) Workbook型。エラーログ書き込み用のワークブック。
+    '   errLogName: (I) String型。エラーログシート名。
+    
+    Dim i As Long
+    Dim colCountVal As Variant
+
+    If configS.ProcessesPerDay <= 0 Then Exit Sub
+
+    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadProcessPatternColNumbersLimited - Reading O col from row 129 for " & configS.ProcessesPerDay & " processes for pattern 1."
+
+    For i = 0 To configS.ProcessesPerDay - 1
+        colCountVal = GetCellValue(srcSheet, "O" & (129 + i), "LoadProcessPatternColNumbersLimited", errFlag, "工程列数 (O" & (129 + i) & ")", wbLog, errLogName, True, "Long", 0) ' isRequired=True, MinValue=0
+        
+        If errFlag Then Exit For ' Stop if GetCellValue reported a fatal error (e.g. non-numeric for required Long)
+
+        If Not IsEmpty(colCountVal) Then
+            configS.ProcessPatternColNumbers(1)(i) = CLng(colCountVal)
+        Else
+            ' This case should ideally not be reached if isRequiredField is True in GetCellValue,
+            ' as GetCellValue would set errFlag=True and exit.
+            ' However, if it somehow passes (e.g. isRequired=False), default to 0.
+            configS.ProcessPatternColNumbers(1)(i) = 0 ' Default to 0 if not specified or invalid
+            If DEBUG_MODE_WARNING Then Call ReportConfigError(errFlag, "LoadProcessPatternColNumbersLimited", "O" & (129 + i), "工程列数値が不正または空のため0を適用 (非致命的扱い)", wbLog, errLogName, False)
+        End If
+    Next i
+End Sub
+
 ' --- Stubs for future implementation ---
 Private Function ParseOffset(offsetString As String, ByRef resultOffset As tOffset) As Boolean
     ' TODO: Implement offset string parsing
@@ -342,6 +416,47 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
     ' B-10: 1日の工程数 (O114) - Required, Long, Min 1
     configStruct.ProcessesPerDay = GetCellValue(wsConfig, "O114", "LoadConfiguration (B-10)", m_errorOccurred, "1日の工程数", targetWorkbook, configStruct.ErrorLogSheetName, True, "Long", 1)
 
+    ' --- C. 工程パターン定義 (ステップ4限定読み込み) ---
+    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Reading Section C (Limited for Step 4)"
+    configStruct.CurrentPatternIdentifier = "1" ' 固定でパターン"1"を使用 (仕様変更: FileProcessPatternToUse -> CurrentPatternIdentifier)
+
+    If configStruct.ProcessesPerDay > 0 Then ' 配列をReDimする前に要素数を確認
+        ReDim configStruct.ProcessDetails(0 To configStruct.ProcessesPerDay - 1) As tProcessDetail
+        ' ProcessPatternColNumbers is a jagged array: (PatternIndex)(ProcessIndex)
+        ' For step 4, we only care about pattern "1". PatternIndex will be 1.
+        ReDim configStruct.ProcessPatternColNumbers(1 To 1) 
+        ReDim configStruct.ProcessPatternColNumbers(1)(0 To configStruct.ProcessesPerDay - 1) As Long
+        
+        Call LoadProcessDetailsLimited(configStruct, wsConfig, m_errorOccurred, targetWorkbook, configStruct.ErrorLogSheetName)
+        If m_errorOccurred Then GoTo FinalConfigCheck ' Stop further processing in this section if error occurred
+        
+        Call LoadProcessPatternColNumbersLimited(configStruct, wsConfig, m_errorOccurred, targetWorkbook, configStruct.ErrorLogSheetName)
+        If m_errorOccurred Then GoTo FinalConfigCheck
+    Else
+        If DEBUG_MODE_WARNING Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - WARNING: M02_ConfigReader.LoadConfiguration - ProcessesPerDay is 0 or less (" & configStruct.ProcessesPerDay & "). Skipping C section array ReDims and limited loading."
+        ' ProcessesPerDayが0以下の場合、関連配列のReDimは行わない
+    End If
+
+    ' --- E. 処理対象ファイル定義 (ステップ4限定読み込み) ---
+    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Reading Section E (Limited for Step 4)"
+    ReDim configStruct.TargetFileFolderPaths(0 To 0) As String ' Only one file for now
+    
+    Dim filePathP557Val As Variant
+    filePathP557Val = GetCellValue(wsConfig, "P557", "LoadConfiguration (E-1)", m_errorOccurred, "処理対象ファイルパス(P557)", targetWorkbook, configStruct.ErrorLogSheetName, True, "String") ' isRequired = True
+    
+    If Not m_errorOccurred Then ' Check if GetCellValue itself caused a fatal error
+        If Not IsEmpty(filePathP557Val) And Len(CStr(filePathP557Val)) > 0 Then
+            configStruct.TargetFileFolderPaths(0) = CStr(filePathP557Val)
+            If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - TargetFileFolderPaths(0) (P557): '" & configStruct.TargetFileFolderPaths(0) & "'"
+        Else ' This specific case (IsEmpty or empty string for a required field) should be caught by GetCellValue
+             ' However, if isRequiredField was accidentally False, this would be a fallback.
+             ' For safety, ensure error is flagged if required field is empty.
+            Call ReportConfigError(m_errorOccurred, "LoadConfiguration (E-1)", "P557", "処理対象ファイルパス(P557)が必須ですが空です。", targetWorkbook, configStruct.ErrorLogSheetName, True)
+        End If
+    End If
+    ' If m_errorOccurred is True due to GetCellValue failing, the value in TargetFileFolderPaths(0) might be meaningless.
+
+FinalConfigCheck: ' Label for GoTo statements if errors occur in C or E
     ' --- Final Check ---
     If m_errorOccurred Then
         If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M02_ConfigReader.LoadConfiguration - One or more configuration errors occurred. See logs."
