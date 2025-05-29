@@ -7,35 +7,43 @@ Public Sub ExtractDataMain()
     Dim wbThis As Workbook ' このマクロが記述されているワークブック
     Dim startTime As Double ' 処理開始時刻
     Dim endTime As Double   ' 処理終了時刻
-    Dim errNum As Long, errDesc As String, errSource As String ' GlobalErrorHandler_M01 で使用
+    Dim wsConfig As Worksheet       ' Configシートオブジェクト
+    Dim errNum As Long, errDesc As String, errSource As String ' Error handler variables - ensure these are at Sub level
 
     On Error GoTo GlobalErrorHandler_M01
     Application.ScreenUpdating = False
     startTime = Timer
     Set wbThis = ThisWorkbook
 
+    ' --- 0. Configシート特定 ---
+    On Error Resume Next ' 一時的にエラーハンドリングを変更
+    Set wsConfig = wbThis.Worksheets(CONFIG_SHEET_DEFAULT_NAME)
+    On Error GoTo GlobalErrorHandler_M01 ' 通常のエラーハンドラに戻す
+
+    If wsConfig Is Nothing Then
+        MsgBox "Configシート「" & CONFIG_SHEET_DEFAULT_NAME & "」が見つかりません。処理を中断します。", vbCritical, "致命的なエラー"
+        GoTo FinalizeMacro_M01
+    End If
+
     Call InitializeConfigStructure(g_configSettings) ' グローバル設定構造体を初期化
     g_configSettings.StartTime = Now()
     g_configSettings.ScriptFullName = wbThis.FullName
+    
+    ' --- 1. Configシート基本読み込みフェーズ (ログシート名等) ---
+    If Not M02_ConfigReader.LoadConfiguration(g_configSettings, wsConfig) Then
+        MsgBox "Configシートからログシート名（O44, O45）を読み込めませんでした。処理を中断します。", vbCritical, "初期化エラー"
+        ' LoadConfigurationが失敗した場合、g_configSettings.ErrorLogSheetName は不定なのでハードコードした名前で試みる
+        Call SafeWriteErrorLog(wbThis, "緊急エラーログ_LoadConfig失敗", "M01_MainControl", "ExtractDataMain", "M02_ConfigReader.LoadConfigurationがFalseを返しました", 0, "必須ログシート名読み込み失敗")
+        GoTo FinalizeMacro_M01
+    End If
 
-    If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG: M01_MainControl.ExtractDataMain - マクロ実行開始。初期化処理完了。"
-
-    ' --- 1. Configシート読み込みフェーズ ---
-    ' Call M02_ConfigReader.LoadConfiguration(g_configSettings, wbThis.Worksheets(CONFIG_SHEET_DEFAULT_NAME))
+    ' デバッグモードがONの場合、イミディエイトウィンドウに「マクロ実行開始。初期化処理完了。」といったログを出力。 (This debug log might be moved after LoadConfiguration)
+    If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG: M01_MainControl.ExtractDataMain - マクロ実行開始。初期化処理・基本Config読み込み完了。"
 
     ' --- 2. 各種シート準備フェーズ ---
-    ' M03_SheetManager.PrepareSheets はグローバル変数 g_errorLogWorksheet と g_nextErrorLogRow を設定します。
     If Not M03_SheetManager.PrepareSheets(g_configSettings, wbThis) Then
-        ' SafeWriteErrorLogの呼び出しには、既に存在するg_configSettingsからシート名を取得する
-        ' ただし、g_configSettings自体が未初期化の可能性は極めて低い（InitializeConfigStructureが先のため）
-        ' ここではconfigが最低限読み込めている前提でエラーログシート名をg_configSettingsから取得
-        Dim tempErrorLogName As String
-        If Not g_configSettings.ErrorLogSheetName = "" Then
-            tempErrorLogName = g_configSettings.ErrorLogSheetName
-        Else
-            tempErrorLogName = "エラーログ(デフォルト)" ' Fallback name
-        End If
-        Call SafeWriteErrorLog(wbThis, tempErrorLogName, "M01_MainControl", "ExtractDataMain", "ログシート準備失敗", 0, "M03_SheetManager.PrepareSheetsがFalseを返しました")
+        ' PrepareSheetsが失敗した場合でも、LoadConfigurationでErrorLogSheetNameは読み込めているはず
+        Call SafeWriteErrorLog(wbThis, g_configSettings.ErrorLogSheetName, "M01_MainControl", "ExtractDataMain", "M03_SheetManager.PrepareSheetsがFalseを返しました", 0, "ログシート準備失敗")
         MsgBox "ログシートの準備に失敗しました。処理を中断します。", vbCritical, "初期化エラー"
         GoTo FinalizeMacro_M01
     End If
@@ -77,12 +85,13 @@ GlobalErrorHandler_M01:
     If g_errorLogWorksheet Is Nothing Then
         ' g_errorLogWorksheetが未設定の場合 (PrepareSheetsより前、または失敗時) はSafeWriteErrorLogを試みる
         Dim errorSheetNameAttempt As String
-        ' g_configSettings は InitializeConfigStructure で初期化されているため Nothing にはならない。
-        ' ErrorLogSheetName が空文字列の可能性はある。
-        If Not g_configSettings.ErrorLogSheetName = "" Then
+        ' g_configSettings は UDT なので Nothing にはならない。InitializeConfigStructure で初期化される。
+        ' LoadConfiguration が成功していれば ErrorLogSheetName が入っている。
+        If Len(g_configSettings.ErrorLogSheetName) > 0 Then
             errorSheetNameAttempt = g_configSettings.ErrorLogSheetName
         Else
-            errorSheetNameAttempt = "エラーログ(M01エラーハンドラ)" ' より明確なフォールバック名
+            ' LoadConfiguration失敗時などのフォールバック
+            errorSheetNameAttempt = "エラーログ(M01グローバルエラー)"
         End If
         Call SafeWriteErrorLog(wbThis, errorSheetNameAttempt, "M01_MainControl", "ExtractDataMain (GlobalErrorHandler_M01)", "エラー発生 (エラーログシート準備前または失敗): " & errSource, errNum, errDesc)
     Else

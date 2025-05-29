@@ -15,9 +15,11 @@ Public Sub WriteErrorLog(moduleName As String, procedureName As String, relatedI
     On Error GoTo WriteErrorLog_InternalError
 
     If g_errorLogWorksheet Is Nothing Then
-        If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG: M04_LogWriter.WriteErrorLog - g_errorLogWorksheet is Nothing. Cannot write error log."
+        If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M04_LogWriter.WriteErrorLog - g_errorLogWorksheet is Nothing. Cannot write error log."
         Exit Sub
     End If
+    
+    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M04_LogWriter.WriteErrorLog - Writing to: '" & g_errorLogWorksheet.Name & "'!A" & g_nextErrorLogRow & ", Module: " & moduleName & ", Procedure: " & procedureName
 
     With g_errorLogWorksheet
         .Cells(g_nextErrorLogRow, 1).Value = Format(Now, "yyyy/mm/dd hh:nn:ss") ' A: 発生日時
@@ -52,6 +54,11 @@ Public Sub SafeWriteErrorLog(targetWorkbook As Workbook, errorLogSheetNameAttemp
 
     On Error Resume Next ' このプロシージャ全体のエラーはできるだけ無視して処理を試みる
 
+    If Trim(errorLogSheetNameAttempt) = "" Then
+        If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M04_LogWriter.SafeWriteErrorLog - errorLogSheetNameAttempt is empty. Cannot write log."
+        Exit Sub
+    End If
+
     Dim ws As Worksheet
     Dim nextRow As Long
 
@@ -74,17 +81,23 @@ Public Sub SafeWriteErrorLog(targetWorkbook As Workbook, errorLogSheetNameAttemp
         ws.Cells(1, 7).Value = "対処内容"
         ws.Cells(1, 8).Value = "変数情報"
         nextRow = 2
-    Else ' シートが存在する場合
-        nextRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row + 1
-        ' Prompt specified logic: If it's row 2 and A1 is empty (empty sheet), set nextRow = 1.
-        If ws.Cells(1, 1).Value = vbNullString And nextRow = 2 Then
-            nextRow = 1
+    Else ' シートが存在する場合 (Revised nextRow logic)
+        If ws.Cells(1, 1).Value = vbNullString Then
+            ' Sheet is not new, but A1 is empty. Check if other cells in Col A have data.
+            If ws.Cells(ws.Rows.Count, 1).End(xlUp).Row = 1 And ws.Cells(1,1).Value = vbNullString Then ' Added second check for A1 again for clarity
+                nextRow = 1
+            Else
+                nextRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row + 1
+            End If
+        Else
+            ' A1 has data
+            nextRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row + 1
         End If
-        ' Ensure nextRow is at least 1
-        If nextRow < 1 Then nextRow = 1
+        If nextRow > ws.Rows.Count Then nextRow = ws.Rows.Count ' Safety for very full sheet
+        If nextRow <= 0 Then nextRow = 1 ' Ensure nextRow is at least 1
         
-        ' If writing to row 1 (because sheet was empty and nextRow became 1), ensure headers are there.
-        ' This specifically handles the case where nextRow is determined to be 1 for an existing sheet.
+        ' If headers were expected and nextRow is 1, ensure headers are written.
+        ' This part is maintained from previous logic, now applied after the new nextRow calculation.
         If nextRow = 1 And ws.Cells(1,1).Value = vbNullString Then
             ws.Cells(1, 1).Value = "発生日時"
             ws.Cells(1, 2).Value = "モジュール"
@@ -99,6 +112,8 @@ Public Sub SafeWriteErrorLog(targetWorkbook As Workbook, errorLogSheetNameAttemp
             ' This is an accepted behavior for this robust "safe" logger.
         End If
     End If
+
+    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M04_LogWriter.SafeWriteErrorLog - Writing to: '" & ws.Name & "'!A" & nextRow & ", Module: " & moduleName & ", Procedure: " & procedureName
 
     With ws
         .Cells(nextRow, 1).Value = Format(Now, "yyyy/mm/dd hh:nn:ss")
@@ -156,6 +171,8 @@ Public Sub WriteFilterLog(ByRef config As tConfigSettings, ByVal targetWorkbook 
         wsLog.Cells(1, 3).Value = "値"
         nextLogWriteRow = 2 ' ヘッダー書いたのでデータは次から
     End If
+    
+    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M04_LogWriter.WriteFilterLog - Attempting to write initial logs to: '" & wsLog.Name & "'!A" & nextLogWriteRow
 
     Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "マクロ実行", "開始: " & Format(config.StartTime, "yyyy/mm/dd hh:nn:ss"))
     Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "実行ファイルパス", config.ScriptFullName)

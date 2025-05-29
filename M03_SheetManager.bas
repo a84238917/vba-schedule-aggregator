@@ -27,6 +27,12 @@ Private Function EnsureSheetExists(targetWorkbook As Workbook, sheetNameToEnsure
     ' Returns:
     '   Worksheetオブジェクト (成功時)、Nothing (失敗時)
 
+    If Trim(sheetNameToEnsure) = "" Then
+        If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M03_SheetManager.EnsureSheetExists - sheetNameToEnsure is empty. Called from: " & callerFuncName
+        Set EnsureSheetExists = Nothing
+        Exit Function
+    End If
+
     Dim ws As Worksheet
 
     On Error Resume Next ' シートの存在確認に関するエラーを一旦無視
@@ -100,42 +106,48 @@ Public Function PrepareSheets(ByRef config As tConfigSettings, ByVal targetWorkb
     If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M03_SheetManager.PrepareSheets - Starting sheet preparation."
 
     ' エラーログシートの準備
+    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M03_SheetManager.PrepareSheets - Preparing Error Log Sheet: '" & config.ErrorLogSheetName & "'"
     Set wsErr = EnsureSheetExists(targetWorkbook, config.ErrorLogSheetName, config, "PrepareSheets", True)
-    If wsErr Is Nothing Then
-        If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M03_SheetManager.PrepareSheets - Failed to prepare Error Log Sheet."
-        ' SafeWriteErrorLog is called by EnsureSheetExists on failure to create, or here if EnsureSheetExists returns Nothing for other reasons.
-        ' However, the prompt explicitly asks for this call here too.
-        Call SafeWriteErrorLog(targetWorkbook, config.ErrorLogSheetName, "M03_SheetManager", "PrepareSheets", "エラーログシートの準備に失敗しました。", 0, "EnsureSheetExistsがNothingを返しました")
-        Exit Function ' Returns False
-    Else
-        Set g_errorLogWorksheet = wsErr
-        ' 次のエラーログ書き込み行を決定
-        If wsErr.Cells(1, 1).Value = vbNullString Then ' Check if sheet is completely empty or A1 is blank
-            g_nextErrorLogRow = IIf(Application.WorksheetFunction.CountA(wsErr.Rows(1)) > 0, 2, 1) ' Start from row 2 if headers (any cell in row 1) exist, else 1
-        Else ' A1 has data (likely headers or existing log)
-            g_nextErrorLogRow = wsErr.Cells(wsErr.Rows.Count, 1).End(xlUp).Row + 1
-        End If
-        
-        ' if first row has data (e.g. header), and g_nextErrorLogRow is 1 (e.g. from an empty sheet where End(xlUp) was row 1), start from second
-        If g_nextErrorLogRow = 1 And wsErr.Cells(1,1).Value <> vbNullString Then g_nextErrorLogRow = 2
 
-        If g_nextErrorLogRow < 1 Then g_nextErrorLogRow = 1 ' Ensure it's at least 1
-        
-        If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M03_SheetManager.PrepareSheets - Error Log Sheet ready. Next error log row: " & g_nextErrorLogRow
+    If Not wsErr Is Nothing Then ' Ensure wsErr is valid before using it
+        Set g_errorLogWorksheet = wsErr
+        ' Calculate g_nextErrorLogRow based on content of column A in g_errorLogWorksheet
+        If Application.WorksheetFunction.CountA(g_errorLogWorksheet.Columns(1)) = 0 Then
+            ' Column A is completely empty
+            g_nextErrorLogRow = 1
+        Else
+            ' Column A has some data, find the last cell with data and add 1
+            g_nextErrorLogRow = g_errorLogWorksheet.Cells(g_errorLogWorksheet.Rows.Count, 1).End(xlUp).Row + 1
+        End If
+        ' If headers were just written by EnsureSheetExists, and CountA(Columns(1)) found only the header,
+        ' End(xlUp).Row would be 1, so g_nextErrorLogRow becomes 2, which is correct.
+        ' If the sheet was truly empty and headers were just written, CountA(Columns(1)) is 1.
+        ' If the sheet was truly empty and no headers (e.g. createHeaders = False), CountA is 0, next row is 1.
+        If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M03_SheetManager.PrepareSheets - g_nextErrorLogRow determined as: " & g_nextErrorLogRow
+    Else
+        ' This case should ideally be caught by "If wsErr Is Nothing Then" block earlier,
+        ' but as a safeguard:
+        If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M03_SheetManager.PrepareSheets - wsErr object was Nothing when trying to set g_nextErrorLogRow."
+        ' SafeWriteErrorLog is called by EnsureSheetExists on failure to create, or here if EnsureSheetExists returns Nothing for other reasons.
+        Call SafeWriteErrorLog(targetWorkbook, config.ErrorLogSheetName, "M03_SheetManager", "PrepareSheets", "エラーログシートの準備に失敗しました(wsErr is Nothing)。", 0, "EnsureSheetExistsがNothingを返しました")
+        PrepareSheets = False ' Explicitly set to false as a critical part failed
+        Exit Function
     End If
 
     ' 検索条件ログシートの準備
+    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M03_SheetManager.PrepareSheets - Preparing Filter Log Sheet: '" & config.SearchConditionLogSheetName & "'"
     Set wsFilter = EnsureSheetExists(targetWorkbook, config.SearchConditionLogSheetName, config, "PrepareSheets", True)
     If wsFilter Is Nothing Then
         If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M03_SheetManager.PrepareSheets - Failed to prepare Search Condition Log Sheet."
         Call SafeWriteErrorLog(targetWorkbook, config.ErrorLogSheetName, "M03_SheetManager", "PrepareSheets", "検索条件ログシートの準備に失敗しました。", 0, "EnsureSheetExistsがNothingを返しました")
         Exit Function ' Returns False
-    Else
-        If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M03_SheetManager.PrepareSheets - Search Condition Log Sheet ready."
     End If
+    ' If wsFilter is not Nothing, it implies success for this part.
+    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M03_SheetManager.PrepareSheets - Search Condition Log Sheet ready."
+
 
     PrepareSheets = True ' All successful
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M03_SheetManager.PrepareSheets - Sheet preparation completed successfully."
+    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M03_SheetManager.PrepareSheets - Sheet preparation finished successfully."
     Exit Function
 
 PrepareSheets_Error:
