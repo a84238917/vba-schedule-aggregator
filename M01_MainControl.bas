@@ -7,7 +7,7 @@ Public Sub ExtractDataMain()
     Dim wbThis As Workbook ' このマクロが記述されているワークブック
     Dim startTime As Double ' 処理開始時刻
     Dim endTime As Double   ' 処理終了時刻
-    Dim wsConfig As Worksheet       ' Configシートオブジェクト
+    ' Dim wsConfig As Worksheet ' No longer needed here, LoadConfiguration handles it.
     Dim errNum As Long, errDesc As String, errSource As String ' Error handler variables - ensure these are at Sub level
 
     On Error GoTo GlobalErrorHandler_M01
@@ -15,30 +15,24 @@ Public Sub ExtractDataMain()
     startTime = Timer
     Set wbThis = ThisWorkbook
 
-    ' --- 0. Configシート特定 ---
-    On Error Resume Next ' 一時的にエラーハンドリングを変更
-    Set wsConfig = wbThis.Worksheets(CONFIG_SHEET_DEFAULT_NAME)
-    On Error GoTo GlobalErrorHandler_M01 ' 通常のエラーハンドラに戻す
-
-    If wsConfig Is Nothing Then
-        MsgBox "Configシート「" & CONFIG_SHEET_DEFAULT_NAME & "」が見つかりません。処理を中断します。", vbCritical, "致命的なエラー"
-        GoTo FinalizeMacro_M01
-    End If
-
-    Call InitializeConfigStructure(g_configSettings) ' グローバル設定構造体を初期化
+    ' Initialize the global settings structure first. This ensures it's clean.
+    Call InitializeConfigStructure(g_configSettings)
+    ' Set initial values that don't depend on the config sheet itself
     g_configSettings.StartTime = Now()
     g_configSettings.ScriptFullName = wbThis.FullName
     
-    ' --- 1. Configシート基本読み込みフェーズ (ログシート名等) ---
-    If Not M02_ConfigReader.LoadConfiguration(g_configSettings, wsConfig) Then
-        MsgBox "Configシートからログシート名（O44, O45）を読み込めませんでした。処理を中断します。", vbCritical, "初期化エラー"
-        ' LoadConfigurationが失敗した場合、g_configSettings.ErrorLogSheetName は不定なのでハードコードした名前で試みる
-        Call SafeWriteErrorLog(wbThis, "緊急エラーログ_LoadConfig失敗", "M01_MainControl", "ExtractDataMain", "M02_ConfigReader.LoadConfigurationがFalseを返しました", 0, "必須ログシート名読み込み失敗")
+    ' --- 1. Configシート読み込みフェーズ ---
+    If Not M02_ConfigReader.LoadConfiguration(g_configSettings, wbThis, CONFIG_SHEET_DEFAULT_NAME) Then
+        ' LoadConfiguration内で詳細なエラーはSafeWriteErrorLogを使って記録されているはず
+        MsgBox "Configシート「" & CONFIG_SHEET_DEFAULT_NAME & "」の読み込みに失敗しました。詳細はエラーログを確認してください。処理を中断します。", vbCritical, "初期化エラー"
+        ' SafeWriteErrorLogをここで再度呼び出す必要はないかもしれないが、念のため最終的な失敗を示すログは残す
+        ' ただし、ErrorLogSheetNameがg_configSettingsに正しく設定されているか不明なため、フォールバック名を使用
+        Call SafeWriteErrorLog(wbThis, "緊急エラーログ_LoadConfig失敗_Main", "M01_MainControl", "ExtractDataMain", "M02_ConfigReader.LoadConfigurationがFalseを返しました (詳細は先行ログ参照)", 0, "Config読み込み失敗")
         GoTo FinalizeMacro_M01
     End If
 
-    ' デバッグモードがONの場合、イミディエイトウィンドウに「マクロ実行開始。初期化処理完了。」といったログを出力。 (This debug log might be moved after LoadConfiguration)
-    If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG: M01_MainControl.ExtractDataMain - マクロ実行開始。初期化処理・基本Config読み込み完了。"
+    ' デバッグモードがONの場合、イミディエイトウィンドウに「マクロ実行開始。初期化処理・Config読み込み完了。」といったログを出力。
+    If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG: M01_MainControl.ExtractDataMain - マクロ実行開始。初期化処理・Config読み込み完了。"
 
     ' --- 2. 各種シート準備フェーズ ---
     If Not M03_SheetManager.PrepareSheets(g_configSettings, wbThis) Then
