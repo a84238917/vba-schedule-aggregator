@@ -1,6 +1,7 @@
 # vba-schedule-aggregator
 ----
 # Directory memo
+```
 vba-schedule-aggregator/               # リポジトリルート
 ├── .gitignore                         # Gitで追跡しないファイルを指定
 ├── README.md                          # プロジェクトの説明、フォルダ構成の日本語解説など
@@ -26,3 +27,4 @@ vba-schedule-aggregator/               # リポジトリルート
     │   └── monthly_schedule_202504_example.xlsx     # 抽出元Excel (旧: 抽出元_2025.04 月間予定表.xlsx)
     └── output_examples/               # 出力結果のサンプル
         └── output_example.csv         # 出力結果のサンプル
+```
