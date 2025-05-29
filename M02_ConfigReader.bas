@@ -349,6 +349,41 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
         Exit Function ' Returns False
     End If
 
+    ' --- Add Debug Print for Loaded Config Values ---
+    If configStruct.DebugModeFlag Then
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG: --- Loaded Configuration Settings (M02_ConfigReader) ---"
+        ' A. 全般設定
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   A-1. DebugModeFlag (O3): " & configStruct.DebugModeFlag
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   A-2. DefaultFolderPath (O12): '" & configStruct.DefaultFolderPath & "'"
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   A-3. OutputSheetName (O43): '" & configStruct.OutputSheetName & "'"
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   A-4. SearchConditionLogSheetName (O44): '" & configStruct.SearchConditionLogSheetName & "'"
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   A-5. ErrorLogSheetName (O45): '" & configStruct.ErrorLogSheetName & "'"
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   A-6. ConfigSheetName (O46): '" & configStruct.ConfigSheetName & "'"
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   A-7. GetPatternDataMethod (O122): " & configStruct.GetPatternDataMethod
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:        ConfigSheetFullName: '" & configStruct.ConfigSheetFullName & "'"
+        
+        ' B. 工程表ファイル内 設定
+        If ConfigReader_IsArrayInitialized(configStruct.TargetSheetNames) Then
+            If UBound(configStruct.TargetSheetNames) >= LBound(configStruct.TargetSheetNames) Then ' Check if array actually has elements
+                Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   B-1. TargetSheetNames (O66-O75): " & Join(configStruct.TargetSheetNames, ", ")
+            Else
+                Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   B-1. TargetSheetNames (O66-O75): (Array Initialized but Empty)"
+            End If
+        Else
+            Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   B-1. TargetSheetNames (O66-O75): (Not Initialized or Empty)"
+        End If
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   B-2. HeaderRowCount (O87): " & configStruct.HeaderRowCount
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   B-3. HeaderColCount (O88): " & configStruct.HeaderColCount
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   B-4. RowsPerDay (O89): " & configStruct.RowsPerDay
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   B-5. MaxDaysPerSheet (O90): " & configStruct.MaxDaysPerSheet
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   B-6. YearCellAddress (O101): '" & configStruct.YearCellAddress & "'"
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   B-7. MonthCellAddress (O102): '" & configStruct.MonthCellAddress & "'"
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   B-8. DayColumnLetter (O103): '" & configStruct.DayColumnLetter & "'"
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   B-9. DayRowOffset (O104): " & configStruct.DayRowOffset
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   B-10. ProcessesPerDay (O114): " & configStruct.ProcessesPerDay
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG: --- End of Loaded Configuration Settings ---"
+    End If
+
     LoadConfiguration = True
     If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Configuration loaded successfully."
     Exit Function
