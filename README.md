@@ -108,17 +108,6 @@ vba-schedule-aggregator/
     *   エラーハンドリングを適切に行い、堅牢性を高めます。
     *   レイトバインディングを基本とし、外部参照設定を極力不要にします。
 
-## 貢献・バグ報告
-
-バグ報告や機能改善の提案は、GitHubのIssuesを通じてお願いします。
-プルリクエストも歓迎します。
-
-## ライセンス
-
-(プロジェクトに適したライセンスを記述してください。例: MIT License, Apache License 2.0 など。指定がなければ省略可)
-
----
-```
 
 ## フォルダ名・ファイル名・ディレクトリ構成の提案 (修正版)
 
@@ -141,24 +130,20 @@ vba-schedule-aggregator/               # リポジトリルート
 │   ├── 05_Expected_Behavior.md        # マクロに期待される具体的な動作フロー、ステップバイステップの説明
 │   └── 06_Development_Notes_and_Considerations.md # 開発上の注意点、AIへの補足事項、過去の課題など
 │
-└── samples/                           # マクロのテストやデモンストレーションに使用するサンプルファイル群
-    ├── config_examples/               # Configシートの設定例
-    │   └── config_settings_example.xlsx  # 具体的な設定値が入力されたConfigシートを含むExcelファイル
-    │                                  # (または、config_settings_example.csv でも可)
+└── samples/                                 # マクロのテストやデモンストレーションに使用するサンプルファイル群
+    ├── examples_config_sheet/               # Configシートの設定例
+    │   └── config_settings_example.csv      # 具体的な設定値が入力されたConfigシートをcsvへ変更したもの
     │
-    ├── input_schedule_templates/      # 処理対象となる工程表Excelファイルのテンプレートまたは代表的なサンプル
-    │   ├── schedule_template_pattern_A.xlsx # 工程パターンAに対応する工程表の空またはサンプルデータ入りテンプレート
-    │   └── schedule_template_pattern_B.xlsx # 工程パターンBに対応する工程表のテンプレート
+    ├── examples_work_sheet/                 # (Workシートを使用する場合) Workシートのデータ構造とサンプル
+    │   └── work_sheet_sample_data.csv
     │
-    ├── input_schedule_data_examples/  # 具体的なデータが入った処理対象工程表のサンプル
-    │   ├── monthly_schedule_202504_pA.xlsx # 2025年4月、パターンAの工程表サンプル
-    │   └── monthly_schedule_202505_pB.xlsx # 2025年5月、パターンBの工程表サンプル
+    ├── input_schedule_data_examples/                      # 具体的なデータが入った処理対象工程表のサンプル
+    │   ├── monthly_schedule_202504_pA.xlsx                # 2025年4月、パターンAの工程表サンプルExcel
+    │   ├── monthly_schedule_202504_pA_data.csv            # 2025年4月、パターンAの工程表サンプルcsvへ変更したもの
+    │   └── monthly_schedule_202504_pA_data_screenshot.png # 2025年5月、パターンBの工程表サンプルスクリーンショット
     │
-    ├── output_data_examples/          # マクロによる抽出結果（「一覧」シートの内容）のサンプル
-    │   └── extracted_data_sample.csv    # 抽出結果のCSV形式サンプル
-    │
-    └── (optional) work_sheet_examples/ # (Workシートを使用する場合) Workシートのデータ構造とサンプル
-        └── work_sheet_sample_data.csv
+    └── output_data_examples/            # マクロによる抽出結果（「一覧」シートの内容）のサンプル
+        └── extracted_data_sample.csv    # 抽出結果のCSV形式サンプル
 
 ```
 
