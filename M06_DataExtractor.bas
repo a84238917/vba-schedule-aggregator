@@ -377,15 +377,22 @@ Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tC
                         currentOutputHeader = outputActualHeaderNames(outputColIdx)
                         currentDataValue = "" ' Default to empty
 
-                        If currentOutputHeader = "日付" Then currentDataValue = Format(dateInLoop, "yyyy/mm/dd(aaa)")
-                        ElseIf currentOutputHeader = "年" Then currentDataValue = currentYear
-                        ElseIf currentOutputHeader = "月" Then currentDataValue = currentMonth
-                        ElseIf currentOutputHeader = "シート名" Then currentDataValue = actualTargetSheetName
-                        ElseIf currentOutputHeader = "管内1" And processIdx <= UBound(config.ProcessDetails) Then currentDataValue = config.ProcessDetails(processIdx).Kankatsu1
-                        ElseIf currentOutputHeader = "管内2" And processIdx <= UBound(config.ProcessDetails) Then currentDataValue = config.ProcessDetails(processIdx).Kankatsu2
+                        If currentOutputHeader = "日付" Then
+                            currentDataValue = Format(dateInLoop, "yyyy/mm/dd(aaa)")
+                        ElseIf currentOutputHeader = "年" Then
+                            currentDataValue = currentYear
+                        ElseIf currentOutputHeader = "月" Then
+                            currentDataValue = currentMonth
+                        ElseIf currentOutputHeader = "シート名" Then
+                            currentDataValue = actualTargetSheetName
+                        ElseIf currentOutputHeader = "管内1" And processIdx <= UBound(config.ProcessDetails) Then
+                            currentDataValue = config.ProcessDetails(processIdx).Kankatsu1
+                        ElseIf currentOutputHeader = "管内2" And processIdx <= UBound(config.ProcessDetails) Then
+                            currentDataValue = config.ProcessDetails(processIdx).Kankatsu2
                         ' Add Bunrui1-3 here if they become part of ProcessDetails or specific config lists later
                         ElseIf workerHeaderMap.Exists(currentOutputHeader) Then
                             Dim workerSequenceNum As Long: workerSequenceNum = workerHeaderMap(currentOutputHeader)
+                            ' currentDataValue is already defaulted to ""
                             If sagyoinMasterIndex <> -1 And Not baseSagyoinOffsetIsEmpty Then
                                 ' Determine maxWorkersForThisProcess safely
                                 maxWorkersForThisProcess = 0
@@ -397,13 +404,14 @@ Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tC
                                     End If
                                 End If
 
-                                If workerSequenceNum <= Application.WorksheetFunction.Min(MAX_WORKERS_TO_EXTRACT, maxWorkersForThisProcess) Then
+                                If workerSequenceNum > 0 And workerSequenceNum <= Application.WorksheetFunction.Min(MAX_WORKERS_TO_EXTRACT, maxWorkersForThisProcess) Then
                                     Dim sagyoinOffsetCol As Long: sagyoinOffsetCol = baseSagyoinOffset.Col + (workerSequenceNum - 1)
                                     currentDataValue = GetValueFromOffset(wsKoutei, currentBaseRowForProcess, currentBaseColForProcess, CreateOffset(baseSagyoinOffset.Row, sagyoinOffsetCol), currentOutputHeader, config, mainWorkbook)
                                     If Len(CStr(currentDataValue)) > 0 Then actualExtractedWorkerCount = actualExtractedWorkerCount + 1
                                 End If
                             End If
                         Else ' Attempt to find in OffsetItemMasterNames
+                            ' currentDataValue is already defaulted to ""
                             foundMasterOffset = False
                             If LogExtractor_IsArrayInitialized(config.OffsetItemMasterNames) Then
                                 For masterIdx = LBound(config.OffsetItemMasterNames) To UBound(config.OffsetItemMasterNames)
@@ -416,7 +424,7 @@ Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tC
                                     End If
                                 Next masterIdx
                             End If
-                            If Not foundMasterOffset And config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: Header '" & currentOutputHeader & "' not found in master offset names or fixed fields for process " & processIdx
+                            If Not foundMasterOffset And config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: Header '" & currentOutputHeader & "' not found in master offset names or fixed fields for ProcessIdx " & processIdx
                         End If
                         oneRowOfExtractedData(outputColIdx) = currentDataValue
                     Next outputColIdx
