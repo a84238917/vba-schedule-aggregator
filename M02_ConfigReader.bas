@@ -147,16 +147,27 @@ Private Sub LoadStringList(ByRef targetStringArray() As String, sourceSheet As W
 End Sub
 
 Private Sub ReportConfigError(ByRef overallErrorFlag As Boolean, errorSourceContext As String, errorSourceCell As String, errorMessageText As String, _
-                                ByVal wbForLog As Workbook, ByVal errorLogSheetNameForLog As String, Optional isFatal As Boolean = True)
+                                ByVal wbForLog As Workbook, ByVal errorLogSheetNameForLog As String, Optional isFatal As Boolean = True, Optional errorLevel As String = "")
     ' 設定読み込みエラーを報告し、必要に応じて全体エラーフラグを立てます。
     If isFatal Then overallErrorFlag = True
     
     Dim logSourceModule As String
     logSourceModule = "M02_ConfigReader." & errorSourceContext ' errorSourceContext will be like "LoadConfiguration (A-1)"
-
-    If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - CONFIG_ERROR" & IIf(isFatal, " (FATAL)", " (WARNING)") & ": " & logSourceModule & " - Cell: " & errorSourceCell & " - Message: " & errorMessageText
     
-    Call SafeWriteErrorLog(wbForLog, errorLogSheetNameForLog, logSourceModule, errorSourceCell, errorMessageText, 0, "")
+    Dim levelToLog As String
+    If Len(errorLevel) > 0 Then
+        levelToLog = errorLevel
+    Else
+        If isFatal Then
+            levelToLog = "ERROR" ' Or "CONFIG_ERROR_FATAL"
+        Else
+            levelToLog = "WARNING" ' Or "CONFIG_WARNING"
+        End If
+    End If
+
+    If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - CONFIG_REPORT: Level='" & levelToLog & "', Module='" & logSourceModule & "', Cell='" & errorSourceCell & "', Message='" & errorMessageText & "'"
+    
+    Call M04_LogWriter.SafeWriteErrorLog(levelToLog, wbForLog, errorLogSheetNameForLog, logSourceModule, errorSourceCell, errorMessageText, 0, "")
 End Sub
 
 Private Function IsValidCellAddress(cellAddressString As String) As Boolean
@@ -339,7 +350,7 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
             configStruct.DebugModeFlag = tempVal
         Else ' Value was empty or not a valid boolean string (but not a read error from GetCellValue)
             configStruct.DebugModeFlag = False ' Default value
-            If DEBUG_MODE_WARNING Then Call ReportConfigError(m_errorOccurred, "LoadConfiguration (A-1)", "O3", "デバッグモードフラグ(O3)が不正または空のためFalseを適用", targetWorkbook, configStruct.ErrorLogSheetName, False) ' Not fatal
+            If DEBUG_MODE_WARNING Then Call ReportConfigError(m_errorOccurred, "LoadConfiguration (A-1)", "O3", "デバッグモードフラグ(O3)が不正または空のためFalseを適用", targetWorkbook, configStruct.ErrorLogSheetName, False, "WARNING_CONFIG_DEFAULT")
         End If
     End If
     ' Note: m_errorOccurred could be true if GetCellValue had a fatal read error.
@@ -351,7 +362,7 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
             configStruct.TraceDebugEnabled = tempVal
         Else
             configStruct.TraceDebugEnabled = False ' Default to False
-            If DEBUG_MODE_WARNING Then Call ReportConfigError(m_errorOccurred, "LoadConfiguration (A-Trace)", "O4", "詳細デバッグ出力フラグ(O4)が不正または未設定のためFalseを適用", targetWorkbook, configStruct.ErrorLogSheetName, False)
+            If DEBUG_MODE_WARNING Then Call ReportConfigError(m_errorOccurred, "LoadConfiguration (A-Trace)", "O4", "詳細デバッグ出力フラグ(O4)が不正または未設定のためFalseを適用", targetWorkbook, configStruct.ErrorLogSheetName, False, "WARNING_CONFIG_DEFAULT")
         End If
     End If
     ' Now TraceDebugEnabled is set in configStruct and can be used by subsequent DEBUG_DETAIL prints in this Sub
@@ -385,7 +396,7 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
             configStruct.GetPatternDataMethod = tempVal
         Else
             configStruct.GetPatternDataMethod = False ' Default value (VBA method)
-            If DEBUG_MODE_WARNING Then Call ReportConfigError(m_errorOccurred, "LoadConfiguration (A-7)", "O122", "工程パターンデータ取得方法(O122)が不正または空のためFalse(VBA方式)を適用", targetWorkbook, configStruct.ErrorLogSheetName, False) ' Not fatal
+            If DEBUG_MODE_WARNING Then Call ReportConfigError(m_errorOccurred, "LoadConfiguration (A-7)", "O122", "工程パターンデータ取得方法(O122)が不正または空のためFalse(VBA方式)を適用", targetWorkbook, configStruct.ErrorLogSheetName, False, "WARNING_CONFIG_DEFAULT")
         End If
     End If
 
@@ -532,6 +543,6 @@ FinalConfigCheck: ' Label for GoTo statements if errors occur in C or E
     Exit Function
 
 LoadConfiguration_Error_MainHandler:
-    Call ReportConfigError(m_errorOccurred, "LoadConfiguration", "N/A", "実行時エラー " & Err.Number & ": " & Err.Description, targetWorkbook, configStruct.ErrorLogSheetName) ' configStruct.ErrorLogSheetName might be empty here
+    Call ReportConfigError(m_errorOccurred, "LoadConfiguration", "N/A", "実行時エラー " & Err.Number & ": " & Err.Description, targetWorkbook, configStruct.ErrorLogSheetName, True, "FATAL_RUNTIME") ' configStruct.ErrorLogSheetName might be empty here
     LoadConfiguration = False
 End Function

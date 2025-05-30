@@ -29,11 +29,20 @@ Public Sub ExtractDataMain()
     
     ' --- 1. Configシート読み込みフェーズ ---
     If Not M02_ConfigReader.LoadConfiguration(g_configSettings, wbThis, CONFIG_SHEET_DEFAULT_NAME) Then
-        ' LoadConfiguration内で詳細なエラーはSafeWriteErrorLogを使って記録されているはず
-        MsgBox "Configシート「" & CONFIG_SHEET_DEFAULT_NAME & "」の読み込みに失敗しました。詳細はエラーログを確認してください。処理を中断します。", vbCritical, "初期化エラー"
-        ' SafeWriteErrorLogをここで再度呼び出す必要はないかもしれないが、念のため最終的な失敗を示すログは残す
-        ' ただし、ErrorLogSheetNameがg_configSettingsに正しく設定されているか不明なため、フォールバック名を使用
-        Call SafeWriteErrorLog(wbThis, "緊急エラーログ_LoadConfig失敗_Main", "M01_MainControl", "ExtractDataMain", "M02_ConfigReader.LoadConfigurationがFalseを返しました (詳細は先行ログ参照)", 0, "Config読み込み失敗")
+        Dim actualErrorLogSheetName As String
+        Dim errorLevelForLog As String: errorLevelForLog = "CRITICAL" ' Define error level
+        
+        On Error Resume Next ' Attempt to read O45 for the error log sheet name
+        actualErrorLogSheetName = wbThis.Worksheets(CONFIG_SHEET_DEFAULT_NAME).Range("O45").Value
+        On Error GoTo GlobalErrorHandler_M01 ' Restore main error handler
+        
+        If Len(Trim(CStr(actualErrorLogSheetName))) = 0 Then
+            actualErrorLogSheetName = "ErrorLog_Fallback_ConfigFail" ' Final fallback if O45 is empty/unreadable
+            If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M01_MainControl.ExtractDataMain - Could not read ErrorLogSheetName from O45. Using fallback: " & actualErrorLogSheetName
+        End If
+        
+        MsgBox "Configシート「" & CONFIG_SHEET_DEFAULT_NAME & "」の読み込みに問題がありました。詳細は「" & actualErrorLogSheetName & "」シートを確認してください。処理を中断します。", vbCritical, "初期化エラー"
+        Call M04_LogWriter.SafeWriteErrorLog(errorLevelForLog, wbThis, actualErrorLogSheetName, "M01_MainControl", "ExtractDataMain", "M02_ConfigReader.LoadConfigurationがFalseを返しました", 0, "Config読み込み失敗")
         GoTo FinalizeMacro_M01
     End If
 
@@ -50,7 +59,7 @@ Public Sub ExtractDataMain()
     ' --- 2. 各種シート準備フェーズ ---
     If Not M03_SheetManager.PrepareSheets(g_configSettings, wbThis) Then
         ' PrepareSheetsが失敗した場合でも、LoadConfigurationでErrorLogSheetNameは読み込めているはず
-        Call SafeWriteErrorLog(wbThis, g_configSettings.ErrorLogSheetName, "M01_MainControl", "ExtractDataMain", "M03_SheetManager.PrepareSheetsがFalseを返しました", 0, "ログシート準備失敗")
+        Call M04_LogWriter.SafeWriteErrorLog("CRITICAL", wbThis, g_configSettings.ErrorLogSheetName, "M01_MainControl", "ExtractDataMain", "M03_SheetManager.PrepareSheetsがFalseを返しました", 0, "ログシート準備失敗")
         MsgBox "ログシートの準備に失敗しました。処理を中断します。", vbCritical, "初期化エラー"
         GoTo FinalizeMacro_M01
     End If
@@ -65,7 +74,7 @@ Public Sub ExtractDataMain()
     ' --- 3. 処理対象ファイル特定フェーズ & 6. メインループフェーズ ---
     If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M01_MainControl.ExtractDataMain - Starting file processing phase."
 
-    If M05_FileProcessor.GetTargetFiles(g_configSettings, targetFiles) Then
+    If M05_FileProcessor.GetTargetFiles(g_configSettings, wbThis, targetFiles) Then
         If targetFiles.Count > 0 Then
             If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG: M01_MainControl.ExtractDataMain - " & targetFiles.Count & " target file(s) identified."
             For Each procFile In targetFiles
@@ -118,10 +127,10 @@ GlobalErrorHandler_M01:
             ' LoadConfiguration失敗時などのフォールバック
             errorSheetNameAttempt = "エラーログ(M01グローバルエラー)"
         End If
-        Call SafeWriteErrorLog(wbThis, errorSheetNameAttempt, "M01_MainControl", "ExtractDataMain (GlobalErrorHandler_M01)", "エラー発生 (エラーログシート準備前または失敗): " & errSource, errNum, errDesc)
+        Call M04_LogWriter.SafeWriteErrorLog("ERROR", wbThis, errorSheetNameAttempt, "M01_MainControl", "ExtractDataMain (GlobalErrorHandler_M01)", "エラー発生 (エラーログシート準備前または失敗): " & errSource, errNum, errDesc)
     Else
         ' g_errorLogWorksheetが設定されていれば通常のWriteErrorLogを使用
-        Call WriteErrorLog("M01_MainControl", "ExtractDataMain (GlobalErrorHandler_M01)", errSource, errNum, errDesc, "処理中断")
+        Call M04_LogWriter.WriteErrorLog("ERROR", "M01_MainControl", "ExtractDataMain (GlobalErrorHandler_M01)", errSource, errNum, errDesc, "処理中断")
     End If
     
     MsgBox "エラーが発生しました。" & vbCrLf & _

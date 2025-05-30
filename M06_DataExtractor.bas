@@ -71,11 +71,11 @@ Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tC
         If UBound(config.TargetSheetNames) >= LBound(config.TargetSheetNames) Then
             targetSheetName = config.TargetSheetNames(LBound(config.TargetSheetNames))
         Else
-            Call M04_LogWriter.SafeWriteErrorLog(mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", "処理対象シート名リスト(config.TargetSheetNames)が空です。", 0, kouteiFilePath)
+            Call M04_LogWriter.SafeWriteErrorLog("ERROR", mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", "処理対象シート名リスト(config.TargetSheetNames)が空です。", 0, kouteiFilePath)
             GoTo ExtractDataFromFile_Finally ' Graceful exit
         End If
     Else
-        Call M04_LogWriter.SafeWriteErrorLog(mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", "処理対象シート名リスト(config.TargetSheetNames)が初期化されていません。", 0, kouteiFilePath)
+        Call M04_LogWriter.SafeWriteErrorLog("ERROR", mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", "処理対象シート名リスト(config.TargetSheetNames)が初期化されていません。", 0, kouteiFilePath)
         GoTo ExtractDataFromFile_Finally
     End If
 
@@ -85,7 +85,7 @@ Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tC
     On Error GoTo ExtractDataFromFile_Error ' Restore main error handler
     
     If wsKoutei Is Nothing Then
-        Call M04_LogWriter.SafeWriteErrorLog(mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", "シートが見つかりません: " & targetSheetName, 0, kouteiFilePath)
+        Call M04_LogWriter.SafeWriteErrorLog("ERROR", mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", "シートが見つかりません: " & targetSheetName, 0, kouteiFilePath)
         GoTo ExtractDataFromFile_Finally
     End If
 
@@ -96,7 +96,7 @@ Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tC
     
     If Not IsNumeric(yearVal) Or Not IsNumeric(monthVal) Or CLng(yearVal) < 1900 Or CLng(yearVal) > 2999 Or CLng(monthVal) < 1 Or CLng(monthVal) > 12 Then
         tempStr = "年セル(" & config.YearCellAddress & ")または月セル(" & config.MonthCellAddress & ")の値が不正です。Year='" & CStr(yearVal) & "', Month='" & CStr(monthVal) & "'"
-        Call M04_LogWriter.SafeWriteErrorLog(mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", tempStr, 0, kouteiFilePath & "/" & targetSheetName)
+        Call M04_LogWriter.SafeWriteErrorLog("ERROR", mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", tempStr, 0, kouteiFilePath & "/" & targetSheetName)
         GoTo ExtractDataFromFile_Finally
     End If
     currentYear = CLng(yearVal)
@@ -157,7 +157,7 @@ ExtractDataFromFile_Finally:
 
 ExtractDataFromFile_Error:
     tempStr = "実行時エラー " & Err.Number & ": " & Err.Description & ", Procedure: ExtractDataFromFile, File: " & kouteiFilePath
-    Call M04_LogWriter.SafeWriteErrorLog(mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", tempStr, Err.Number, Err.Description)
+    Call M04_LogWriter.SafeWriteErrorLog("ERROR", mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", tempStr, Err.Number, Err.Description)
     ExtractDataFromFile = False ' Ensure False on error
     Resume ExtractDataFromFile_Finally
 End Function

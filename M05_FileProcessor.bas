@@ -32,10 +32,11 @@ Private Function IsExcelFile(ByVal fileName As String) As Boolean
     End Select
 End Function
 
-Public Function GetTargetFiles(ByRef config As tConfigSettings, ByRef targetFilesCollection As Collection) As Boolean
+Public Function GetTargetFiles(ByRef config As tConfigSettings, ByVal mainAppWorkbook As Workbook, ByRef targetFilesCollection As Collection) As Boolean
     ' Config設定 (P557) から単一の処理対象ファイルパスを取得し、検証後、コレクションに追加します。(ステップ4限定仕様)
     ' Arguments:
     '   config: (I) tConfigSettings型。設定情報を保持します。ErrorLogSheetName と TargetFileFolderPaths(0) を使用します。
+    '   mainAppWorkbook: (I) Workbook型。マクロ本体（ログシートが存在する）のワークブックオブジェクト。
     '   targetFilesCollection: (O) Collection型。検証済みのファイルパスが追加されます。
     ' Returns:
     '   Boolean: ファイルパスの取得と検証に成功し、コレクションに追加できた場合はTrue、それ以外はFalse。
@@ -67,13 +68,13 @@ Public Function GetTargetFiles(ByRef config As tConfigSettings, ByRef targetFile
                 successFlag = True
                 If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M05_FileProcessor.GetTargetFiles - Added target file: '" & filePathFromConfig & "'"
             Else
-                Call M04_LogWriter.SafeWriteErrorLog(ActiveWorkbook, config.ErrorLogSheetName, "M05_FileProcessor", "GetTargetFiles", "指定されたファイルはExcelファイルではありません: " & filePathFromConfig, 0, "")
+                Call M04_LogWriter.SafeWriteErrorLog("WARNING", mainAppWorkbook, config.ErrorLogSheetName, "M05_FileProcessor", "GetTargetFiles", "指定されたファイルはExcelファイルではありません: " & filePathFromConfig, 0, "")
             End If
         Else
-            Call M04_LogWriter.SafeWriteErrorLog(ActiveWorkbook, config.ErrorLogSheetName, "M05_FileProcessor", "GetTargetFiles", "指定されたファイルが見つかりません: " & filePathFromConfig, 0, "")
+            Call M04_LogWriter.SafeWriteErrorLog("ERROR", mainAppWorkbook, config.ErrorLogSheetName, "M05_FileProcessor", "GetTargetFiles", "指定されたファイルが見つかりません: " & filePathFromConfig, 0, "")
         End If
     Else
-        Call M04_LogWriter.SafeWriteErrorLog(ActiveWorkbook, config.ErrorLogSheetName, "M05_FileProcessor", "GetTargetFiles", "ConfigシートP557に処理対象ファイルパスが指定されていません。", 0, "")
+        Call M04_LogWriter.SafeWriteErrorLog("WARNING", mainAppWorkbook, config.ErrorLogSheetName, "M05_FileProcessor", "GetTargetFiles", "ConfigシートP557に処理対象ファイルパスが指定されていません。", 0, "")
     End If
     
     GetTargetFiles = successFlag
@@ -81,7 +82,7 @@ Public Function GetTargetFiles(ByRef config As tConfigSettings, ByRef targetFile
     Exit Function
 
 GetTargetFiles_Error:
-    Call M04_LogWriter.SafeWriteErrorLog(ActiveWorkbook, config.ErrorLogSheetName, "M05_FileProcessor", "GetTargetFiles", "実行時エラー " & Err.Number & ": " & Err.Description, Err.Number, Err.Description)
+    Call M04_LogWriter.SafeWriteErrorLog("ERROR", mainAppWorkbook, config.ErrorLogSheetName, "M05_FileProcessor", "GetTargetFiles", "実行時エラー " & Err.Number & ": " & Err.Description, Err.Number, Err.Description)
     GetTargetFiles = False
     Set fso = Nothing
 End Function
