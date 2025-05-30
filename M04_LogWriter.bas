@@ -40,13 +40,13 @@ WriteErrorLog_InternalError:
     If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - CRITICAL_ERROR: M04_LogWriter.WriteErrorLog internal error - " & Err.Description
 End Sub
 
-Public Sub SafeWriteErrorLog(targetWorkbook As Workbook, errorLogSheetNameAttempt As String, errorLevel As String, moduleName As String, procedureName As String, relatedInfo As String, errorNumber As Long, errorDescription As String, Optional actionTaken As String = "", Optional variableInfo As String = "")
+Public Sub SafeWriteErrorLog(errorLevel As String, targetWorkbook As Workbook, errorLogSheetNameAttempt As String, moduleName As String, procedureName As String, relatedInfo As String, errorNumber As Long, errorDescription As String, Optional actionTaken As String = "", Optional variableInfo As String = "")
     ' Configシート読み込み前やグローバル変数が未初期化の段階でも使用可能な、より堅牢なエラーログ書き込み処理です。
     ' 指定されたワークブックとシート名でエラーログシートを特定または作成し、情報を書き込みます。
     ' Arguments:
+    '   errorLevel: エラーの重要度 ("ERROR", "WARNING", "INFO"など)
     '   targetWorkbook: 書き込み対象のワークブック
     '   errorLogSheetNameAttempt: 試行するエラーログシート名
-    '   errorLevel: エラーの重要度 ("ERROR", "WARNING", "INFO"など)
     '   moduleName: エラーが発生したモジュール名
     '   procedureName: エラーが発生したプロシージャ名
     '   relatedInfo: 関連情報

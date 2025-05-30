@@ -15,6 +15,7 @@ Public Sub ExtractDataMain()
     Dim extractedTotal As Long
     Dim wsResultOutput As Worksheet ' For future output sheet, pass Nothing for now
     Dim nextOutputRow As Long     ' For future output row, pass 0 for now
+    Dim errorLevelForLog As String ' For logging calls
 
     On Error GoTo GlobalErrorHandler_M01
     Application.ScreenUpdating = False
@@ -30,7 +31,7 @@ Public Sub ExtractDataMain()
     ' --- 1. Configシート読み込みフェーズ ---
     If Not M02_ConfigReader.LoadConfiguration(g_configSettings, wbThis, CONFIG_SHEET_DEFAULT_NAME) Then
         Dim actualErrorLogSheetName As String
-        Dim errorLevelForLog As String: errorLevelForLog = "CRITICAL" ' Define error level
+        errorLevelForLog = "CRITICAL" ' Define error level
         
         On Error Resume Next ' Attempt to read O45 for the error log sheet name
         actualErrorLogSheetName = wbThis.Worksheets(CONFIG_SHEET_DEFAULT_NAME).Range("O45").Value
