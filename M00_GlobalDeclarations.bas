@@ -6,7 +6,7 @@ Public Const DEBUG_MODE_ERROR As Boolean = True    ' エラー関連の詳細デ
 Public Const DEBUG_MODE_WARNING As Boolean = False ' 警告レベルのデバッグ情報を出力するかどうか
 
 ' Fixed Setting Value Constant
-Public Const CONFIG_SHEET_DEFAULT_NAME As String = "Config (2)" ' 設定シートのデフォルト名
+Public Const CONFIG_SHEET_DEFAULT_NAME As String = "Config" ' 設定シートのデフォルト名
 
 ' User-Defined Type: tOffset
 Public Type tOffset
