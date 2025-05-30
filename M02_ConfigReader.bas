@@ -424,8 +424,19 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
         ReDim configStruct.ProcessDetails(0 To configStruct.ProcessesPerDay - 1) As tProcessDetail
         ' ProcessPatternColNumbers is a jagged array: (PatternIndex)(ProcessIndex)
         ' For step 4, we only care about pattern "1". PatternIndex will be 1.
-        ReDim configStruct.ProcessPatternColNumbers(1 To 1) 
-        ReDim configStruct.ProcessPatternColNumbers(1)(0 To configStruct.ProcessesPerDay - 1) As Long
+        ReDim configStruct.ProcessPatternColNumbers(1 To 1) ' This outer ReDim for the Variant array is fine
+        
+        ' Correctly ReDim the inner Long array for pattern 1
+        Dim tempPattern1Cols() As Long ' Declare a temporary dynamic array of Long
+        If configStruct.ProcessesPerDay > 0 Then
+            ReDim tempPattern1Cols(0 To configStruct.ProcessesPerDay - 1) As Long
+        Else
+            ' Create an empty but initialized array if ProcessesPerDay is 0 or less.
+            ' This prevents errors if other code tries to access LBound/UBound later,
+            ' though logic should ideally check ProcessesPerDay before looping.
+            ReDim tempPattern1Cols(0 To -1) As Long ' Standard way to make an empty initialized array
+        End If
+        configStruct.ProcessPatternColNumbers(1) = tempPattern1Cols ' Assign this Long array to the Variant slot
         
         Call LoadProcessDetailsLimited(configStruct, wsConfig, m_errorOccurred, targetWorkbook, configStruct.ErrorLogSheetName)
         If m_errorOccurred Then GoTo FinalConfigCheck ' Stop further processing in this section if error occurred

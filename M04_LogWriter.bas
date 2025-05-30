@@ -191,7 +191,7 @@ WriteFilterLog_Error:
     Call SafeWriteErrorLog(targetWorkbook, config.ErrorLogSheetName, "M04_LogWriter", "WriteFilterLog", "フィルターログ書き込みエラー", Err.Number, Err.Description)
 End Sub
 
-Private Sub WriteFilterLogEntry(targetLogSheet As Worksheet, ByRef nextLogRow As Long, itemName As String, itemValue As String)
+Public Sub WriteFilterLogEntry(targetLogSheet As Worksheet, ByRef nextLogRow As Long, itemName As String, itemValue As String)
     ' 検索条件ログシートに単一の項目名と値を書き込み、次の書き込み行を更新します。
     ' Arguments:
     '   targetLogSheet: 書き込み対象のログシート
@@ -208,7 +208,7 @@ Private Sub WriteFilterLogEntry(targetLogSheet As Worksheet, ByRef nextLogRow As
     nextLogRow = nextLogRow + 1
 End Sub
 
-Private Sub WriteFilterLogArrayEntry(targetLogSheet As Worksheet, ByRef nextLogRow As Long, itemName As String, ByRef itemArray() As String)
+Public Sub WriteFilterLogArrayEntry(targetLogSheet As Worksheet, ByRef nextLogRow As Long, itemName As String, ByRef itemArray() As String)
     ' 検索条件ログシートに、文字列配列の内容を単一のエントリとして書き込みます。
     ' 配列が空または未初期化の場合、その状態を示す文字列が書き込まれます。
     ' Arguments:
