@@ -1,4 +1,4 @@
-' v0.4.0
+' バージョン：v0.5.0
 Option Explicit
 ' このモジュールは、「Config」シートから全ての設定情報を読み込み、検証し、g_configSettingsグローバル変数に格納する役割を担います。
 
@@ -687,7 +687,7 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
     Else
         configStruct.OffsetSagyoinStart.Row = 0: configStruct.OffsetSagyoinStart.Col = 0
     End If
-    If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG_DETAIL:   F. Offset " & itemName & " (N785): '" & offsetStr & "' -> R:" & configStruct.OffsetSagyoinStart.Row & ", C:" & configStruct.OffsetSagyoinStart.Col & ", IsEmptyOrig: " & configStruct.IsOffsetSagyoinOriginallyEmpty
+    If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG_DETAIL:   F. Offset " & itemName & " (N785): '" & offsetStr & "' -> R:" & configStruct.OffsetSagyoinStart.Row & ", C:" & configStruct.OffsetSagyoinStart.Col & ", IsEmptyOrig: " & configStruct.IsOffsetSagyoinStartOriginallyEmpty
     If m_errorOccurred Then GoTo FinalConfigCheck
 
     ' 9. 旧その他 (N786/O786)
@@ -862,5 +862,3 @@ LoadConfiguration_Error_MainHandler:
     Call ReportConfigError(m_errorOccurred, "LoadConfiguration", "N/A", "実行時エラー " & Err.Number & ": " & Err.Description, targetWorkbook, configStruct.ErrorLogSheetName, True, "FATAL_RUNTIME") ' configStruct.ErrorLogSheetName might be empty here
     LoadConfiguration = False
 End Function
-
-[end of M02_ConfigReader.bas]

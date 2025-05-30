@@ -1,6 +1,6 @@
+' バージョン：v0.5.0
 Option Explicit
 ' このモジュールは、プロジェクト全体で共有されるグローバル定数、Publicなユーザー定義型、およびPublicなグローバル変数を一元的に宣言・管理します。
-' v0.5.0
 
 ' Global Debug Flag Constants
 Public Const DEBUG_MODE_ERROR As Boolean = True    ' エラー関連の詳細デバッグ情報を出力するかどうか
