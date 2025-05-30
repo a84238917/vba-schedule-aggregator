@@ -282,11 +282,40 @@ Private Sub LoadProcessPatternColNumbersLimited(ByRef configS As tConfigSettings
 End Sub
 
 ' --- Stubs for future implementation ---
-Private Function ParseOffset(offsetString As String, ByRef resultOffset As tOffset) As Boolean
-    ' TODO: Implement offset string parsing
-    If DEBUG_MODE_WARNING Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - WARNING: M02_ConfigReader.ParseOffset - STUB called for: " & offsetString
-    ParseOffset = True ' Placeholder
-    Exit Function
+Private Function ParseOffset(offsetString As String, ByRef resultOffset As tOffset, ByRef errorFlag As Boolean, callerProcName As String, itemDesc As String, ByVal wbForLog As Workbook, ByVal errorLogSheetNameForLog As String) As Boolean
+    ' オフセット文字列("行,列")を解析し、tOffset型に格納します。書式不正の場合はエラーを報告しFalseを返します。
+    ' Empty string is considered a valid parse (resulting in 0,0 offset), indicating no offset.
+    ' The caller (GetCellValue or LoadConfiguration) should decide if an empty/zero offset is permissible for a required field.
+    
+    ParseOffset = False ' Default to failure unless explicitly successful
+    resultOffset.Row = 0
+    resultOffset.Col = 0
+    
+    Dim parts() As String
+    Dim strVal As String
+    
+    strVal = Trim(offsetString)
+    
+    If Len(strVal) = 0 Then
+        ParseOffset = True ' Successfully "parsed" an empty string; offset remains 0,0
+        Exit Function
+    End If
+    
+    parts = Split(strVal, ",")
+    
+    If UBound(parts) <> 1 Then
+        Call ReportConfigError(errorFlag, callerProcName, itemDesc, "オフセット書式不正 (カンマ区切り2要素でない): '" & offsetString & "'", wbForLog, errorLogSheetNameForLog, True, "ERROR_CONFIG_PARSE")
+        Exit Function ' Returns False
+    End If
+    
+    If Not IsNumeric(Trim(parts(0))) Or Not IsNumeric(Trim(parts(1))) Then
+        Call ReportConfigError(errorFlag, callerProcName, itemDesc, "オフセット値が数値でない: '" & offsetString & "'", wbForLog, errorLogSheetNameForLog, True, "ERROR_CONFIG_PARSE")
+        Exit Function ' Returns False
+    End If
+    
+    resultOffset.Row = CLng(Trim(parts(0)))
+    resultOffset.Col = CLng(Trim(parts(1)))
+    ParseOffset = True ' Successfully parsed
 End Function
 
 Private Sub LoadProcessPatternColNumbers(ByRef configStruct As tConfigSettings, sourceSheet As Worksheet, callerProcName As String, ByRef errorFlag As Boolean, targetWorkbookForLog As Workbook, errorLogSheetForLog As String)
@@ -493,7 +522,126 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
             Call ReportConfigError(m_errorOccurred, "LoadConfiguration (E-1)", "P557", "処理対象ファイルパス(P557)が必須ですが空です。", targetWorkbook, configStruct.ErrorLogSheetName, True)
         End If
     End If
-    ' If m_errorOccurred is True due to GetCellValue failing, the value in TargetFileFolderPaths(0) might be meaningless.
+    ' If m_errorOccurred is True due to GetCellValue failing, a value in TargetFileFolderPaths(0) might be meaningless.
+
+    ' --- F. 抽出データオフセット定義 ---
+    If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Reading Section F: Extraction Data Offset Definition"
+    Dim itemName As String, offsetStr As String, i As Long ' i for G section
+    Dim tempOffset As tOffset
+
+    Dim offsetItems(0 To 10) As Variant
+    Dim offsetConfigMembers(0 To 10) As String
+    Dim offsetIsEmptyFlags(0 To 10) As String ' String names of the boolean flags
+
+    ' Define mapping for direct assignment (less error-prone than many If/ElseIfs)
+    offsetItems(0) = Array("N778", "O778", "工番")
+    offsetConfigMembers(0) = "OffsetKouban"
+    offsetIsEmptyFlags(0) = "IsOffsetKoubanOriginallyEmpty"
+
+    offsetItems(1) = Array("N779", "O779", "変電所")
+    offsetConfigMembers(1) = "OffsetHensendenjo"
+    offsetIsEmptyFlags(1) = "IsOffsetHensendenjoOriginallyEmpty"
+
+    offsetItems(2) = Array("N780", "O780", "作業名1")
+    offsetConfigMembers(2) = "OffsetSagyomei1"
+    offsetIsEmptyFlags(2) = "IsOffsetSagyomei1OriginallyEmpty"
+
+    offsetItems(3) = Array("N781", "O781", "作業名2")
+    offsetConfigMembers(3) = "OffsetSagyomei2"
+    offsetIsEmptyFlags(3) = "IsOffsetSagyomei2OriginallyEmpty"
+
+    offsetItems(4) = Array("N782", "O782", "担当の名前")
+    offsetConfigMembers(4) = "OffsetTantou"
+    offsetIsEmptyFlags(4) = "IsOffsetTantouOriginallyEmpty"
+
+    offsetItems(5) = Array("N783", "O783", "工事種類")
+    offsetConfigMembers(5) = "OffsetKoujiShurui"
+    offsetIsEmptyFlags(5) = "IsOffsetKoujiShuruiOriginallyEmpty"
+
+    offsetItems(6) = Array("N784", "O784", "人数")
+    offsetConfigMembers(6) = "OffsetNinzu"
+    offsetIsEmptyFlags(6) = "IsOffsetNinzuOriginallyEmpty"
+
+    offsetItems(7) = Array("N785", "O785", "作業員") ' Corresponds to OffsetSagyoinStart
+    offsetConfigMembers(7) = "OffsetSagyoinStart"
+    offsetIsEmptyFlags(7) = "IsOffsetSagyoinOriginallyEmpty"
+
+    offsetItems(8) = Array("N786", "O786", "旧その他")
+    offsetConfigMembers(8) = "OffsetSonota"
+    offsetIsEmptyFlags(8) = "IsOffsetSonotaOriginallyEmpty"
+
+    offsetItems(9) = Array("N787", "O787", "終了時間")
+    offsetConfigMembers(9) = "OffsetShuuryoJikan"
+    offsetIsEmptyFlags(9) = "IsOffsetShuuryoJikanOriginallyEmpty"
+
+    offsetItems(10) = Array("N788", "O788", "分類1抽出元")
+    offsetConfigMembers(10) = "OffsetBunrui1ExtSrc"
+    offsetIsEmptyFlags(10) = "IsOffsetBunrui1ExtSrcOriginallyEmpty"
+
+    For i = LBound(offsetItems) To UBound(offsetItems)
+        itemName = Trim(CStr(wsConfig.Range(offsetItems(i)(0)).Value)) ' Read item name from Config sheet (e.g., N778)
+        offsetStr = Trim(CStr(wsConfig.Range(offsetItems(i)(1)).Value))  ' Read offset string (e.g., O778)
+        
+        ' Set the IsOriginallyEmpty flag using VBA.CallByName
+        CallByName configStruct, offsetIsEmptyFlags(i), VbLet, (Len(offsetStr) = 0)
+
+        If Not ParseOffset(offsetStr, tempOffset, m_errorOccurred, "LoadConfiguration (F-" & offsetItems(i)(2) & ")", itemName & " オフセット(" & offsetItems(i)(1) & ")", targetWorkbook, configStruct.ErrorLogSheetName) Then
+            ' ParseOffset already logged a fatal error if string was malformed AND non-empty.
+            ' If m_errorOccurred is True here, it means a malformed non-empty string was found.
+            ' No further action needed here as error is already flagged.
+        Else ' ParseOffset returned True (either empty string parsed to 0,0 or valid string parsed)
+            If Len(offsetStr) > 0 Then ' If it was not an empty string, assign the parsed offset
+                CallByName configStruct, offsetConfigMembers(i), VbLet, tempOffset
+            Else ' If it was an empty string, ensure offset members are 0,0 (ParseOffset already does this for tempOffset)
+                Dim zeroOffset As tOffset: zeroOffset.Row = 0: zeroOffset.Col = 0
+                CallByName configStruct, offsetConfigMembers(i), VbLet, zeroOffset
+            End If
+        End If
+        
+        If configStruct.TraceDebugEnabled Then
+            Dim currentOffset As tOffset
+            currentOffset = CallByName(configStruct, offsetConfigMembers(i), VbGet) ' Get the value of the offset member
+            Dim currentIsEmptyFlag As Boolean
+            currentIsEmptyFlag = CallByName(configStruct, offsetIsEmptyFlags(i), VbGet)
+            Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG_DETAIL:   F. Offset " & itemName & " (" & offsetItems(i)(0) & "): '" & offsetStr & "' -> R:" & currentOffset.Row & ", C:" & currentOffset.Col & ", IsEmptyOrig: " & currentIsEmptyFlag
+        End If
+        If m_errorOccurred And isFatal Then GoTo FinalConfigCheck ' Check after each parse if a fatal error occurred
+    Next i
+
+    ' --- G. 出力シート設定 ---
+    If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Reading Section G: Output Sheet Settings"
+    configStruct.OutputHeaderRowCount = GetCellValue(wsConfig, "O811", "LoadConfiguration (G-1)", m_errorOccurred, "出力シートヘッダー行数", True, "Long", 1, 10)
+    
+    If Not m_errorOccurred And configStruct.OutputHeaderRowCount > 0 Then
+        ReDim configStruct.OutputHeaderContents(1 To configStruct.OutputHeaderRowCount) As String
+        For i = 1 To configStruct.OutputHeaderRowCount
+            Dim headerCellAddress As String: headerCellAddress = "O" & (811 + i)
+            Dim headerVal As String
+            headerVal = Trim(CStr(GetCellValue(wsConfig, headerCellAddress, "LoadConfiguration (G-2)", m_errorOccurred, "出力シートヘッダー内容 " & i & "行目 (" & headerCellAddress & ")", False, "String")))
+            
+            If m_errorOccurred And Len(headerVal) = 0 Then
+                m_errorOccurred = False ' Clear error if GetCellValue flagged it for an empty optional header line
+            End If
+            configStruct.OutputHeaderContents(i) = headerVal
+        Next i
+    End If
+
+    Dim outputOpt As String
+    outputOpt = UCase(Trim(CStr(GetCellValue(wsConfig, "O1124", "LoadConfiguration (G-3)", m_errorOccurred, "出力データオプション", False, "String"))))
+    If Not m_errorOccurred Then ' Only validate if GetCellValue didn't cause a fatal error
+        If outputOpt = "リセット" Or outputOpt = "引継ぎ" Then
+            configStruct.OutputDataOption = outputOpt
+        Else
+            configStruct.OutputDataOption = "リセット" ' Default
+            If Len(outputOpt) > 0 Then ' Log warning only if there was some (invalid) value
+                Call ReportConfigError(m_errorOccurred, "LoadConfiguration (G-3)", "O1124", "出力データオプションが不正なため「リセット」を使用: '" & outputOpt & "'", targetWorkbook, configStruct.ErrorLogSheetName, False, "WARNING_CONFIG_DEFAULT")
+                 m_errorOccurred = False ' Ensure this specific warning is not fatal for LoadConfiguration
+            End If
+        End If
+    ElseIf Len(configStruct.OutputDataOption) = 0 Then ' If error occurred during GetCellValue and option is not set
+        configStruct.OutputDataOption = "リセット" ' Default
+    End If
+
 
 FinalConfigCheck: ' Label for GoTo statements if errors occur in C or E
     ' --- Final Check ---
@@ -536,6 +684,29 @@ FinalConfigCheck: ' Label for GoTo statements if errors occur in C or E
         Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   B-8. DayColumnLetter (O103): '" & configStruct.DayColumnLetter & "'"
         Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   B-9. DayRowOffset (O104): " & configStruct.DayRowOffset
         Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   B-10. ProcessesPerDay (O114): " & configStruct.ProcessesPerDay
+        
+        ' F. 抽出データオフセット定義
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   F-Kouban (O778): R=" & configStruct.OffsetKouban.Row & ", C=" & configStruct.OffsetKouban.Col & " (OrigEmpty=" & configStruct.IsOffsetKoubanOriginallyEmpty & ")"
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   F-Hensendenjo (O779): R=" & configStruct.OffsetHensendenjo.Row & ", C=" & configStruct.OffsetHensendenjo.Col & " (OrigEmpty=" & configStruct.IsOffsetHensendenjoOriginallyEmpty & ")"
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   F-Sagyomei1 (O780): R=" & configStruct.OffsetSagyomei1.Row & ", C=" & configStruct.OffsetSagyomei1.Col & " (OrigEmpty=" & configStruct.IsOffsetSagyomei1OriginallyEmpty & ")"
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   F-Sagyomei2 (O781): R=" & configStruct.OffsetSagyomei2.Row & ", C=" & configStruct.OffsetSagyomei2.Col & " (OrigEmpty=" & configStruct.IsOffsetSagyomei2OriginallyEmpty & ")"
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   F-Tantou (O782): R=" & configStruct.OffsetTantou.Row & ", C=" & configStruct.OffsetTantou.Col & " (OrigEmpty=" & configStruct.IsOffsetTantouOriginallyEmpty & ")"
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   F-KoujiShurui (O783): R=" & configStruct.OffsetKoujiShurui.Row & ", C=" & configStruct.OffsetKoujiShurui.Col & " (OrigEmpty=" & configStruct.IsOffsetKoujiShuruiOriginallyEmpty & ")"
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   F-Ninzu (O784): R=" & configStruct.OffsetNinzu.Row & ", C=" & configStruct.OffsetNinzu.Col & " (OrigEmpty=" & configStruct.IsOffsetNinzuOriginallyEmpty & ")"
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   F-SagyoinStart (O785): R=" & configStruct.OffsetSagyoinStart.Row & ", C=" & configStruct.OffsetSagyoinStart.Col & " (OrigEmpty=" & configStruct.IsOffsetSagyoinOriginallyEmpty & ")"
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   F-Sonota (O786): R=" & configStruct.OffsetSonota.Row & ", C=" & configStruct.OffsetSonota.Col & " (OrigEmpty=" & configStruct.IsOffsetSonotaOriginallyEmpty & ")"
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   F-ShuuryoJikan (O787): R=" & configStruct.OffsetShuuryoJikan.Row & ", C=" & configStruct.OffsetShuuryoJikan.Col & " (OrigEmpty=" & configStruct.IsOffsetShuuryoJikanOriginallyEmpty & ")"
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   F-Bunrui1ExtSrc (O788): R=" & configStruct.OffsetBunrui1ExtSrc.Row & ", C=" & configStruct.OffsetBunrui1ExtSrc.Col & " (OrigEmpty=" & configStruct.IsOffsetBunrui1ExtSrcOriginallyEmpty & ")"
+
+        ' G. 出力シート設定
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   G-1. OutputHeaderRowCount (O811): " & configStruct.OutputHeaderRowCount
+        If ConfigReader_IsArrayInitialized(configStruct.OutputHeaderContents) Then
+             Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   G-2. OutputHeaderContents (O812-O821): " & Join(configStruct.OutputHeaderContents, " | ")
+        Else
+             Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   G-2. OutputHeaderContents (O812-O821): (Not Initialized or Empty)"
+        End If
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   G-3. OutputDataOption (O1124): '" & configStruct.OutputDataOption & "'"
+        
         Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG: --- End of Loaded Configuration Settings ---"
     End If
 

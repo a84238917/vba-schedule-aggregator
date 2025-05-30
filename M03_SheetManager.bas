@@ -1,19 +1,46 @@
 ' v0.4.0
+' v0.4.0
 Option Explicit
 ' このモジュールは、マクロが使用する各種ワークシート（出力シート、ログシートなど）の準備、検証、および管理を担当します。
 
-Private Function IsArrayInitialized(arr As Variant) As Boolean
+Private Function SheetManager_IsArrayInitialized(arr As Variant) As Boolean
     ' 配列が有効に初期化されているか（少なくとも1つの要素を持つか）を確認します。
     ' Variant型が配列でない場合、または配列であっても要素が割り当てられていない場合（Dim arr() のみでReDimされていない状態など）はFalseを返します。
-    On Error GoTo NotAnArrayOrNotInitialized
+    On Error GoTo NotAnArrayOrNotInitialized_SM
     If IsArray(arr) Then
         Dim lBoundCheck As Long
         lBoundCheck = LBound(arr) ' 配列がReDimされていれば、LBoundはエラーにならない (空でも ReDim arr(0 To -1) など)
-        IsArrayInitialized = True ' LBoundがエラーを起こさなければ、配列は有効（空でもReDimされていればOK）
+        SheetManager_IsArrayInitialized = True ' LBoundがエラーを起こさなければ、配列は有効（空でもReDimされていればOK）
         Exit Function
     End If
-NotAnArrayOrNotInitialized:
-    IsArrayInitialized = False
+NotAnArrayOrNotInitialized_SM:
+    SheetManager_IsArrayInitialized = False
+End Function
+
+Private Function GetHeaderRowCountForSheet(targetSheet As Worksheet, ByRef config As tConfigSettings) As Long
+    ' 指定されたシートのヘッダー行数をConfig設定に基づいて取得します。主に出力シート用です。
+    If targetSheet Is Nothing Then
+        GetHeaderRowCountForSheet = 0
+        Exit Function
+    End If
+    
+    ' configがNothingでないことを確認する (M01_MainControlで先に設定される想定だが念のため)
+    ' ただし、この関数が呼び出される文脈ではconfigは有効であるべき
+    Dim configAvailable As Boolean
+    On Error Resume Next
+    configAvailable = (Not config Is Nothing) ' This check is problematic for UDTs
+    On Error GoTo 0
+    ' A better check might be if a known string member of config has been populated, e.g. ErrorLogSheetName
+    ' For now, assume config is passed correctly. If it were an Object, 'Is Nothing' would be fine.
+    ' Since it's a UDT, it's never Nothing. We rely on its members being populated.
+
+    If targetSheet.Name = config.OutputSheetName Then
+        GetHeaderRowCountForSheet = config.OutputHeaderRowCount
+    Else
+        GetHeaderRowCountForSheet = 0 ' Or handle other sheet types if needed in future
+    End If
+    
+    If GetHeaderRowCountForSheet < 0 Then GetHeaderRowCountForSheet = 0 ' Ensure non-negative
 End Function
 
 Private Function EnsureSheetExists(targetWorkbook As Workbook, sheetNameToEnsure As String, ByRef config As tConfigSettings, callerFuncName As String, createHeaders As Boolean) As Worksheet
@@ -65,10 +92,26 @@ Private Function EnsureSheetExists(targetWorkbook As Workbook, sheetNameToEnsure
                 ws.Cells(1, 3).Value = "条件"
                 ws.Cells(1, 4).Value = "備考"
             ElseIf sheetNameToEnsure = config.OutputSheetName Then
-                ' G-2. 出力シートヘッダー内容 (config.OutputHeaderContents) に基づくヘッダー作成ロジックはステップ5で実装
-                ' For now, can leave a placeholder comment or a single dummy header for testing if needed.
-                ' ws.Cells(1, 1).Value = "（出力シートヘッダー仮）"
-                If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M03_SheetManager.EnsureSheetExists - Placeholder for OutputSheetName headers. Full implementation in Step 5."
+                ' G-2. 出力シートヘッダー内容 (config.OutputHeaderContents)
+                If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M03_SheetManager.EnsureSheetExists - Creating headers for Output Sheet: '" & sheetNameToEnsure & "'"
+                Dim r As Long, c As Long
+                Dim headerParts() As String
+                If config.OutputHeaderRowCount > 0 And SheetManager_IsArrayInitialized(config.OutputHeaderContents) Then
+                    For r = 1 To config.OutputHeaderRowCount
+                        If r <= UBound(config.OutputHeaderContents) And r >= LBound(config.OutputHeaderContents) Then
+                            If Len(config.OutputHeaderContents(r)) > 0 Then
+                                headerParts = Split(config.OutputHeaderContents(r), vbTab)
+                                For c = 0 To UBound(headerParts)
+                                    ws.Cells(r, c + 1).Value = headerParts(c)
+                                Next c
+                            Else ' Empty string in OutputHeaderContents(r) - write single empty cell to make row used
+                                ws.Cells(r, 1).Value = "" 
+                            End If
+                        End If
+                    Next r
+                Else
+                    If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M03_SheetManager.EnsureSheetExists - OutputHeaderRowCount is 0 or OutputHeaderContents not initialized. No headers written for " & sheetNameToEnsure
+                End If
             End If
         End If
     Else
@@ -158,3 +201,55 @@ PrepareSheets_Error:
     PrepareSheets = False
     ' g_errorLogWorksheet might not be set, so can't use WriteErrorLog here.
 End Function
+
+Public Sub PrepareOutputSheet(ByRef config As tConfigSettings, ByVal mainWorkbook As Workbook, ByRef outOutputStartRow As Long)
+    ' 出力シートを準備します。必要に応じて既存データをクリアし、データの書き込み開始行を設定します。
+    ' Arguments:
+    '   config: (I) tConfigSettings型。設定情報を保持します。
+    '   mainWorkbook: (I) Workbook型。マクロ本体のワークブックオブジェクト。
+    '   outOutputStartRow: (O) Long型。出力シートへの書き込み開始行番号。
+
+    Dim wsOutput As Worksheet
+    Dim headerActualRowCount As Long
+    
+    On Error GoTo PrepareOutputSheet_Error
+    outOutputStartRow = 1 ' Default if something fails
+
+    If mainWorkbook Is Nothing Then ' Simplified check, config cannot be Nothing as UDT
+         Call M04_LogWriter.SafeWriteErrorLog("ERROR", mainWorkbook, "ErrorLog_M03_Fallback", "M03_SheetManager", "PrepareOutputSheet", "mainWorkbookがNothingです。", 0, "")
+         Exit Sub
+    End If
+    If Len(config.OutputSheetName) = 0 Then
+         Call M04_LogWriter.SafeWriteErrorLog("ERROR", mainWorkbook, config.ErrorLogSheetName, "M03_SheetManager", "PrepareOutputSheet", "config.OutputSheetNameが空です。", 0, "")
+         Exit Sub
+    End If
+
+    On Error Resume Next
+    Set wsOutput = mainWorkbook.Worksheets(config.OutputSheetName)
+    On Error GoTo PrepareOutputSheet_Error
+    
+    If wsOutput Is Nothing Then
+        ' EnsureSheetExists (called by PrepareSheets) should have created it. If not, something is wrong.
+        Call M04_LogWriter.SafeWriteErrorLog("ERROR", mainWorkbook, config.ErrorLogSheetName, "M03_SheetManager", "PrepareOutputSheet", "出力シート「" & config.OutputSheetName & "」が見つかりません。", 0, "")
+        Exit Sub 
+    End If
+
+    headerActualRowCount = GetHeaderRowCountForSheet(wsOutput, config)
+    If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M03_SheetManager.PrepareOutputSheet - Determined header rows: " & headerActualRowCount & " for sheet " & wsOutput.Name
+
+    If UCase(config.OutputDataOption) = "リセット" Then
+        If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M03_SheetManager.PrepareOutputSheet - Clearing data from row " & (headerActualRowCount + 1) & " onwards in sheet " & wsOutput.Name
+        If wsOutput.ProtectContents Then
+             Call M04_LogWriter.SafeWriteErrorLog("WARNING", mainWorkbook, config.ErrorLogSheetName, "M03_SheetManager", "PrepareOutputSheet", "シート「" & wsOutput.Name & "」が保護されているためデータクリアをスキップしました。", 0, "")
+        ElseIf headerActualRowCount < wsOutput.Rows.Count Then ' Ensure there are rows below header to clear
+            wsOutput.Rows(headerActualRowCount + 1 & ":" & wsOutput.Rows.Count).ClearContents
+        End If
+    End If
+    
+    outOutputStartRow = headerActualRowCount + 1
+    If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M03_SheetManager.PrepareOutputSheet - Output start row set to: " & outOutputStartRow
+    Exit Sub
+PrepareOutputSheet_Error:
+    Call M04_LogWriter.SafeWriteErrorLog("ERROR", mainWorkbook, config.ErrorLogSheetName, "M03_SheetManager", "PrepareOutputSheet", "実行時エラー " & Err.Number & ": " & Err.Description, Err.Number, Err.Description)
+    outOutputStartRow = 1 ' Fallback
+End Sub

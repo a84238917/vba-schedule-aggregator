@@ -13,9 +13,9 @@ Public Sub ExtractDataMain()
     Dim targetFiles As Collection
     Dim procFile As Variant
     Dim fileIdx As Long
-    Dim extractedTotal As Long
+    Dim totalExtractedCount As Long ' Renamed from extractedTotal
     Dim wsResultOutput As Worksheet ' For future output sheet, pass Nothing for now
-    Dim nextOutputRow As Long     ' For future output row, pass 0 for now
+    Dim nextOutputRowVal As Long     ' Renamed from nextOutputRow, for PrepareOutputSheet
     Dim errorLevelForLog As String ' For logging calls
 
     On Error GoTo GlobalErrorHandler_M01
@@ -54,9 +54,9 @@ Public Sub ExtractDataMain()
     ' Initialize Collection and related variables for file processing
     Set targetFiles = New Collection
     fileIdx = 0
-    extractedTotal = 0
+    totalExtractedCount = 0 ' Renamed from extractedTotal
     Set wsResultOutput = Nothing ' Explicitly Nothing for this step
-    nextOutputRow = 0          ' Explicitly 0 for this step
+    nextOutputRowVal = 0          ' Renamed from nextOutputRow, Explicitly 0 for this step
 
     ' --- 2. 各種シート準備フェーズ ---
     If Not M03_SheetManager.PrepareSheets(g_configSettings, wbThis) Then
@@ -66,9 +66,20 @@ Public Sub ExtractDataMain()
         GoTo FinalizeMacro_M01
     End If
 
-    ' --- 4. 出力/ログ準備フェーズ ---
-    ' Call M03_SheetManager.PrepareOutputSheet(wbThis, g_configSettings) ' This remains a stub for now
-
+    ' --- 4. 出力シート準備フェーズ ---
+    If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M01_MainControl.ExtractDataMain - Preparing output sheet."
+    Call M03_SheetManager.PrepareOutputSheet(g_configSettings, wbThis, nextOutputRowVal) ' nextOutputRowVal gets starting row
+    
+    On Error Resume Next ' Handle error if sheet still not found (should not happen if PrepareSheets worked)
+    Set wsResultOutput = wbThis.Worksheets(g_configSettings.OutputSheetName)
+    On Error GoTo GlobalErrorHandler_M01
+    If wsResultOutput Is Nothing Then
+        Call M04_LogWriter.SafeWriteErrorLog("FATAL", wbThis, g_configSettings.ErrorLogSheetName, "M01_MainControl", "ExtractDataMain", "出力シート「" & g_configSettings.OutputSheetName & "」の取得に失敗しました。", 0, "処理中断")
+        MsgBox "致命的エラー: 出力シート「" & g_configSettings.OutputSheetName & "」を準備できませんでした。処理を中断します。", vbCritical, "出力シートエラー"
+        GoTo FinalizeMacro_M01
+    End If
+    If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M01_MainControl.ExtractDataMain - Output sheet '" & wsResultOutput.Name & "' ready. Data will start at row " & nextOutputRowVal
+            
     ' --- 5. 検索条件ログ出力フェーズ ---
     ' ログシートが正常に準備された後に、検索条件ログを書き込みます。
     Call M04_LogWriter.WriteFilterLog(g_configSettings, wbThis)
@@ -85,7 +96,7 @@ Public Sub ExtractDataMain()
                 
                 ' M06_DataExtractor.ExtractDataFromFile呼び出し
                 ' Optional引数 wsOutput, outputNextRow, currentFileNum, totalExtractedCount を渡す
-                If M06_DataExtractor.ExtractDataFromFile(CStr(procFile), g_configSettings, wbThis, wsResultOutput, nextOutputRow, fileIdx, extractedTotal) Then
+                If M06_DataExtractor.ExtractDataFromFile(CStr(procFile), g_configSettings, wbThis, wsResultOutput, nextOutputRowVal, fileIdx, totalExtractedCount) Then
                     If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M01_MainControl.ExtractDataMain - Successfully processed (ExtractDataFromFile returned True) for: '" & CStr(procFile) & "'"
                 Else
                     If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M01_MainControl.ExtractDataMain - Failed to process (ExtractDataFromFile returned False) for: '" & CStr(procFile) & "'"
