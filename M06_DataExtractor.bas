@@ -1,3 +1,4 @@
+' v0.4.0
 Option Explicit
 ' このモジュールは、個々の工程表ファイルを開き、指定されたシートからデータを抽出し、フィルター条件を適用（将来的に）し、結果を出力シートに書き込む（将来的に）処理を担当します。このステップでは、年月と日付の基本情報抽出とログ出力を実装します。
 
@@ -91,17 +92,32 @@ Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tC
 
     ' --- 年月取得 ---
     Dim yearVal As Variant, monthVal As Variant
+    On Error Resume Next ' Handle error if cell address itself is invalid
     yearVal = wsKoutei.Range(config.YearCellAddress).Value
     monthVal = wsKoutei.Range(config.MonthCellAddress).Value
-    
-    If Not IsNumeric(yearVal) Or Not IsNumeric(monthVal) Or CLng(yearVal) < 1900 Or CLng(yearVal) > 2999 Or CLng(monthVal) < 1 Or CLng(monthVal) > 12 Then
-        tempStr = "年セル(" & config.YearCellAddress & ")または月セル(" & config.MonthCellAddress & ")の値が不正です。Year='" & CStr(yearVal) & "', Month='" & CStr(monthVal) & "'"
-        Call M04_LogWriter.SafeWriteErrorLog("ERROR", mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", tempStr, 0, kouteiFilePath & "/" & targetSheetName)
+    On Error GoTo ExtractDataFromFile_Error ' Restore main error handler
+
+    Dim yearStr As String, monthStr As String
+    yearStr = Trim(CStr(yearVal))
+    monthStr = Trim(CStr(monthVal))
+
+    If Len(yearStr) = 0 Or Not IsNumeric(yearStr) Or CLng(yearStr) < 1900 Or CLng(yearStr) > 2999 Then
+        tempStr = "年の値が不正です (" & config.YearCellAddress & "): '" & CStr(yearVal) & "'"
+        If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - " & tempStr
+        Call M04_LogWriter.SafeWriteErrorLog("ERROR", mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile (YearValidation)", tempStr, 13, "年取得エラー")
         GoTo ExtractDataFromFile_Finally
     End If
-    currentYear = CLng(yearVal)
-    currentMonth = CLng(monthVal)
-    If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M06_DataExtractor.ExtractDataFromFile - Year: " & currentYear & ", Month: " & currentMonth
+    currentYear = CLng(yearStr)
+
+    If Len(monthStr) = 0 Or Not IsNumeric(monthStr) Or CLng(monthStr) < 1 Or CLng(monthStr) > 12 Then
+        tempStr = "月の値が不正です (" & config.MonthCellAddress & "): '" & CStr(monthVal) & "'"
+        If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - " & tempStr
+        Call M04_LogWriter.SafeWriteErrorLog("ERROR", mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile (MonthValidation)", tempStr, 13, "月取得エラー")
+        GoTo ExtractDataFromFile_Finally
+    End If
+    currentMonth = CLng(monthStr)
+    
+    If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - Year: " & currentYear & ", Month: " & currentMonth
 
     ' --- フィルターログシート取得 ---
     On Error Resume Next ' Temporarily disable error handling for sheet existence check
@@ -118,29 +134,45 @@ Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tC
         dayCellRow = config.HeaderRowCount + (dayIdx - 1) * config.RowsPerDay + config.DayRowOffset
         dayVal = wsKoutei.Cells(dayCellRow, config.DayColumnLetter).Value
 
-        If Not IsNumeric(dayVal) Or Len(Trim(CStr(dayVal))) = 0 Or CLng(dayVal) <= 0 Then
-            If DEBUG_MODE_WARNING And Not IsEmpty(dayVal) And Len(Trim(CStr(dayVal))) > 0 Then ' Log only if cell wasn't truly blank, but invalid
-                tempStr = "日付セルの値が不正または0以下です (" & config.DayColumnLetter & dayCellRow & "): '" & CStr(dayVal) & "'"
-                If Not filterLogSht Is Nothing Then Call M04_LogWriter.WriteFilterLogEntry(filterLogSht, GetNextFilterLogRow(filterLogSht), "日付取得エラー(スキップ)", kouteiFilePath & "/" & targetSheetName & "/" & tempStr)
-            End If
-            GoTo NextDayInLoop_M06 ' Skip this day
+        If IsEmpty(dayVal) Or Len(Trim(CStr(dayVal))) = 0 Then
+            If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - Day value at " & wsKoutei.Name & "!" & config.DayColumnLetter & dayCellRow & " is empty. Skipping."
+            GoTo NextDayInLoop_M06
         End If
 
-        On Error Resume Next ' For DateSerial error
-        dateInLoop = DateSerial(currentYear, currentMonth, CLng(dayVal))
+        If Not IsNumeric(dayVal) Then
+            tempStr = "日付セルの値が数値ではありません (" & config.DayColumnLetter & dayCellRow & "): '" & CStr(dayVal) & "'"
+            If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - " & tempStr & ". Skipping."
+            If Not filterLogSht Is Nothing Then Call M04_LogWriter.WriteFilterLogEntry(filterLogSht, GetNextFilterLogRow(filterLogSht), "日付取得失敗(非数値)", kouteiFilePath & "/" & targetSheetName & "/" & tempStr)
+            GoTo NextDayInLoop_M06
+        End If
+
+        Dim dayLong As Long
+        dayLong = CLng(dayVal) ' Convert to Long once
+
+        If dayLong <= 0 Or dayLong > 31 Then ' Basic day range check
+            tempStr = "日付セルの値が範囲外(1-31)です (" & config.DayColumnLetter & dayCellRow & "): " & dayLong
+            If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - " & tempStr & ". Skipping."
+            If Not filterLogSht Is Nothing Then Call M04_LogWriter.WriteFilterLogEntry(filterLogSht, GetNextFilterLogRow(filterLogSht), "日付取得失敗(範囲外)", kouteiFilePath & "/" & targetSheetName & "/" & tempStr)
+            GoTo NextDayInLoop_M06
+        End If
+
+        On Error Resume Next ' For DateSerial error only
+        dateInLoop = DateSerial(currentYear, currentMonth, dayLong)
         If Err.Number <> 0 Then
-            On Error GoTo ExtractDataFromFile_Error ' Restore error handler
-            tempStr = "DateSerialで無効な日付 (" & currentYear & "/" & currentMonth & "/" & CLng(dayVal) & "). Error: " & Err.Description
-            If Not filterLogSht Is Nothing Then Call M04_LogWriter.WriteFilterLogEntry(filterLogSht, GetNextFilterLogRow(filterLogSht), "日付検証エラー(スキップ)", kouteiFilePath & "/" & targetSheetName & "/" & tempStr)
+            On Error GoTo ExtractDataFromFile_Error ' Restore main error handler
+            tempStr = "DateSerialで無効な日付です (" & currentYear & "/" & currentMonth & "/" & dayLong & " at " & config.DayColumnLetter & dayCellRow & "). Error: " & Err.Description
+            If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - " & tempStr & ". Skipping."
+            If Not filterLogSht Is Nothing Then Call M04_LogWriter.WriteFilterLogEntry(filterLogSht, GetNextFilterLogRow(filterLogSht), "日付検証エラー(DateSerial)", kouteiFilePath & "/" & targetSheetName & "/" & tempStr)
             Err.Clear
-            GoTo NextDayInLoop_M06 ' Skip this day
+            GoTo NextDayInLoop_M06 
         End If
-        On Error GoTo ExtractDataFromFile_Error ' Restore error handler
-
+        On Error GoTo ExtractDataFromFile_Error ' Restore main error handler
+        
+        ' --- Successful Date Extraction ---
         If Not filterLogSht Is Nothing Then
             tempStr = kouteiFilePath & "/" & targetSheetName & "/" & Format(dateInLoop, "yyyy-mm-dd")
             Call M04_LogWriter.WriteFilterLogEntry(filterLogSht, GetNextFilterLogRow(filterLogSht), "日付抽出成功", tempStr)
-            If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M06_DataExtractor.ExtractDataFromFile - Extracted Date: " & Format(dateInLoop, "yyyy-mm-dd")
+            If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - Extracted Date: " & Format(dateInLoop, "yyyy-mm-dd") & " from cell " & config.DayColumnLetter & dayCellRow
         End If
         ' このステップでは工程処理ループと詳細データ項目抽出は行わない
 NextDayInLoop_M06:

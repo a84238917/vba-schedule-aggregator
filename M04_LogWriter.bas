@@ -1,3 +1,4 @@
+' v0.4.0
 Option Explicit
 ' このモジュールは、エラーログおよび検索条件ログのシートへの書き込み処理を専門に担当します。
 
@@ -193,7 +194,7 @@ Public Sub WriteFilterLog(ByRef config As tConfigSettings, ByVal targetWorkbook 
 
 WriteFilterLog_Error:
     If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M04_LogWriter.WriteFilterLog - Error " & Err.Number & ": " & Err.Description
-    Call SafeWriteErrorLog(targetWorkbook, config.ErrorLogSheetName, "M04_LogWriter", "WriteFilterLog", "フィルターログ書き込みエラー", Err.Number, Err.Description)
+    Call SafeWriteErrorLog("ERROR", targetWorkbook, config.ErrorLogSheetName, "M04_LogWriter", "WriteFilterLog", "フィルターログ書き込みエラー", Err.Number, Err.Description)
 End Sub
 
 Public Sub WriteFilterLogEntry(targetLogSheet As Worksheet, ByRef nextLogRow As Long, itemName As String, itemValue As String)
