@@ -1,9 +1,10 @@
 Option Explicit
 ' このモジュールは、エラーログおよび検索条件ログのシートへの書き込み処理を専門に担当します。
 
-Public Sub WriteErrorLog(moduleName As String, procedureName As String, relatedInfo As String, errorNumber As Long, errorDescription As String, Optional actionTaken As String = "", Optional variableInfo As String = "")
+Public Sub WriteErrorLog(errorLevel As String, moduleName As String, procedureName As String, relatedInfo As String, errorNumber As Long, errorDescription As String, Optional actionTaken As String = "", Optional variableInfo As String = "")
     ' エラー情報をグローバルエラーログシート(g_errorLogWorksheet)に書き込みます。
     ' Arguments:
+    '   errorLevel: エラーの重要度 ("ERROR", "WARNING", "INFO"など)
     '   moduleName: エラーが発生したモジュール名
     '   procedureName: エラーが発生したプロシージャ名
     '   relatedInfo: 関連情報（ファイル名、シート名など）
@@ -19,17 +20,18 @@ Public Sub WriteErrorLog(moduleName As String, procedureName As String, relatedI
         Exit Sub
     End If
     
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M04_LogWriter.WriteErrorLog - Writing to: '" & g_errorLogWorksheet.Name & "'!A" & g_nextErrorLogRow & ", Module: " & moduleName & ", Procedure: " & procedureName
+    If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M04_LogWriter.WriteErrorLog - Writing to: '" & g_errorLogWorksheet.Name & "'!A" & g_nextErrorLogRow & ", Level: " & errorLevel & ", Module: " & moduleName
 
     With g_errorLogWorksheet
-        .Cells(g_nextErrorLogRow, 1).Value = Format(Now, "yyyy/mm/dd hh:nn:ss") ' A: 発生日時
-        .Cells(g_nextErrorLogRow, 2).Value = moduleName                         ' B: モジュール
-        .Cells(g_nextErrorLogRow, 3).Value = procedureName                       ' C: プロシージャ
-        .Cells(g_nextErrorLogRow, 4).Value = relatedInfo                         ' D: 関連情報
-        .Cells(g_nextErrorLogRow, 5).Value = errorNumber                         ' E: エラー番号
-        .Cells(g_nextErrorLogRow, 6).Value = "'" & errorDescription              ' F: エラー内容 (先頭にアポストロフィ)
-        .Cells(g_nextErrorLogRow, 7).Value = actionTaken                         ' G: 対処内容
-        .Cells(g_nextErrorLogRow, 8).Value = Left(variableInfo, 32767)           ' H: 変数情報 (最大長制限)
+        .Cells(g_nextErrorLogRow, 1).Value = errorLevel                         ' A: 重要度
+        .Cells(g_nextErrorLogRow, 2).Value = Format(Now, "yyyy/mm/dd hh:nn:ss") ' B: 発生日時
+        .Cells(g_nextErrorLogRow, 3).Value = moduleName                         ' C: モジュール
+        .Cells(g_nextErrorLogRow, 4).Value = procedureName                       ' D: プロシージャ
+        .Cells(g_nextErrorLogRow, 5).Value = relatedInfo                         ' E: 関連情報
+        .Cells(g_nextErrorLogRow, 6).Value = errorNumber                         ' F: エラー番号
+        .Cells(g_nextErrorLogRow, 7).Value = "'" & errorDescription              ' G: エラー内容 (先頭にアポストロフィ)
+        .Cells(g_nextErrorLogRow, 8).Value = actionTaken                         ' H: 対処内容
+        .Cells(g_nextErrorLogRow, 9).Value = Left(variableInfo, 32767)           ' I: 変数情報 (最大長制限)
     End With
     g_nextErrorLogRow = g_nextErrorLogRow + 1
     Exit Sub
@@ -38,10 +40,11 @@ WriteErrorLog_InternalError:
     If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - CRITICAL_ERROR: M04_LogWriter.WriteErrorLog internal error - " & Err.Description
 End Sub
 
-Public Sub SafeWriteErrorLog(targetWorkbook As Workbook, errorLogSheetNameAttempt As String, moduleName As String, procedureName As String, relatedInfo As String, errorNumber As Long, errorDescription As String, Optional actionTaken As String = "", Optional variableInfo As String = "")
+Public Sub SafeWriteErrorLog(errorLevel As String, targetWorkbook As Workbook, errorLogSheetNameAttempt As String, moduleName As String, procedureName As String, relatedInfo As String, errorNumber As Long, errorDescription As String, Optional actionTaken As String = "", Optional variableInfo As String = "")
     ' Configシート読み込み前やグローバル変数が未初期化の段階でも使用可能な、より堅牢なエラーログ書き込み処理です。
     ' 指定されたワークブックとシート名でエラーログシートを特定または作成し、情報を書き込みます。
     ' Arguments:
+    '   errorLevel: エラーの重要度 ("ERROR", "WARNING", "INFO"など)
     '   targetWorkbook: 書き込み対象のワークブック
     '   errorLogSheetNameAttempt: 試行するエラーログシート名
     '   moduleName: エラーが発生したモジュール名
@@ -71,18 +74,19 @@ Public Sub SafeWriteErrorLog(targetWorkbook As Workbook, errorLogSheetNameAttemp
         Set ws = targetWorkbook.Sheets.Add(After:=targetWorkbook.Sheets(targetWorkbook.Sheets.Count))
         If ws Is Nothing Then Exit Sub ' シート追加に失敗した場合 (例: 保護されたブックなど)
         ws.Name = errorLogSheetNameAttempt
-        ' ヘッダーを書き込む
-        ws.Cells(1, 1).Value = "発生日時"
-        ws.Cells(1, 2).Value = "モジュール"
-        ws.Cells(1, 3).Value = "プロシージャ"
-        ws.Cells(1, 4).Value = "関連情報"
-        ws.Cells(1, 5).Value = "エラー番号"
-        ws.Cells(1, 6).Value = "エラー内容"
-        ws.Cells(1, 7).Value = "対処内容"
-        ws.Cells(1, 8).Value = "変数情報"
+        ' ヘッダーを書き込む (New 9-column structure)
+        ws.Cells(1, 1).Value = "重要度"
+        ws.Cells(1, 2).Value = "発生日時"
+        ws.Cells(1, 3).Value = "モジュール"
+        ws.Cells(1, 4).Value = "プロシージャ"
+        ws.Cells(1, 5).Value = "関連情報"
+        ws.Cells(1, 6).Value = "エラー番号"
+        ws.Cells(1, 7).Value = "エラー内容"
+        ws.Cells(1, 8).Value = "対処内容"
+        ws.Cells(1, 9).Value = "変数情報"
         nextRow = 2
     Else ' シートが存在する場合 (Revised nextRow logic)
-        If ws.Cells(1, 1).Value = vbNullString Then
+        If ws.Cells(1, 1).Value = vbNullString Then ' Check if A1 (which should be "重要度") is empty
             ' Sheet is not new, but A1 is empty. Check if other cells in Col A have data.
             If ws.Cells(ws.Rows.Count, 1).End(xlUp).Row = 1 And ws.Cells(1,1).Value = vbNullString Then ' Added second check for A1 again for clarity
                 nextRow = 1
@@ -98,32 +102,33 @@ Public Sub SafeWriteErrorLog(targetWorkbook As Workbook, errorLogSheetNameAttemp
         
         ' If headers were expected and nextRow is 1, ensure headers are written.
         ' This part is maintained from previous logic, now applied after the new nextRow calculation.
-        If nextRow = 1 And ws.Cells(1,1).Value = vbNullString Then
-            ws.Cells(1, 1).Value = "発生日時"
-            ws.Cells(1, 2).Value = "モジュール"
-            ws.Cells(1, 3).Value = "プロシージャ"
-            ws.Cells(1, 4).Value = "関連情報"
-            ws.Cells(1, 5).Value = "エラー番号"
-            ws.Cells(1, 6).Value = "エラー内容"
-            ws.Cells(1, 7).Value = "対処内容"
-            ws.Cells(1, 8).Value = "変数情報"
-            ' The actual data log will be written to 'nextRow' (which is 1 in this specific case),
-            ' so the first cell "発生日時" will be immediately overwritten by the timestamp of the log.
-            ' This is an accepted behavior for this robust "safe" logger.
+        ' If nextRow becomes 1 for an existing sheet, it means the sheet was likely empty or headerless.
+        ' Write headers if they seem missing (checking new A1 "重要度" and old A1 "発生日時" for robustness).
+        If nextRow = 1 And (ws.Cells(1,1).Value = vbNullString Or ws.Cells(1,2).Value = vbNullString) Then
+            ws.Cells(1, 1).Value = "重要度"
+            ws.Cells(1, 2).Value = "発生日時"
+            ws.Cells(1, 3).Value = "モジュール"
+            ws.Cells(1, 4).Value = "プロシージャ"
+            ws.Cells(1, 5).Value = "関連情報"
+            ws.Cells(1, 6).Value = "エラー番号"
+            ws.Cells(1, 7).Value = "エラー内容"
+            ws.Cells(1, 8).Value = "対処内容"
+            ws.Cells(1, 9).Value = "変数情報"
         End If
     End If
 
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M04_LogWriter.SafeWriteErrorLog - Writing to: '" & ws.Name & "'!A" & nextRow & ", Module: " & moduleName & ", Procedure: " & procedureName
+    If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M04_LogWriter.SafeWriteErrorLog - Writing to: '" & ws.Name & "'!A" & nextRow & ", Level: " & errorLevel & ", Module: " & moduleName
 
     With ws
-        .Cells(nextRow, 1).Value = Format(Now, "yyyy/mm/dd hh:nn:ss")
-        .Cells(nextRow, 2).Value = moduleName
-        .Cells(nextRow, 3).Value = procedureName
-        .Cells(nextRow, 4).Value = relatedInfo
-        .Cells(nextRow, 5).Value = errorNumber
-        .Cells(nextRow, 6).Value = "'" & errorDescription
-        .Cells(nextRow, 7).Value = actionTaken
-        .Cells(nextRow, 8).Value = Left(variableInfo, 32767)
+        .Cells(nextRow, 1).Value = errorLevel                         ' A: 重要度
+        .Cells(nextRow, 2).Value = Format(Now, "yyyy/mm/dd hh:nn:ss") ' B: 発生日時
+        .Cells(nextRow, 3).Value = moduleName                         ' C: モジュール
+        .Cells(nextRow, 4).Value = procedureName                       ' D: プロシージャ
+        .Cells(nextRow, 5).Value = relatedInfo                         ' E: 関連情報
+        .Cells(nextRow, 6).Value = errorNumber                         ' F: エラー番号
+        .Cells(nextRow, 7).Value = "'" & errorDescription              ' G: エラー内容
+        .Cells(nextRow, 8).Value = actionTaken                         ' H: 対処内容
+        .Cells(nextRow, 9).Value = Left(variableInfo, 32767)           ' I: 変数情報
     End With
 
     Set ws = Nothing
@@ -172,7 +177,7 @@ Public Sub WriteFilterLog(ByRef config As tConfigSettings, ByVal targetWorkbook 
         nextLogWriteRow = 2 ' ヘッダー書いたのでデータは次から
     End If
     
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M04_LogWriter.WriteFilterLog - Attempting to write initial logs to: '" & wsLog.Name & "'!A" & nextLogWriteRow
+    If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M04_LogWriter.WriteFilterLog - Attempting to write initial logs to: '" & wsLog.Name & "'!A" & nextLogWriteRow
 
     Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "マクロ実行", "開始: " & Format(config.StartTime, "yyyy/mm/dd hh:nn:ss"))
     Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "実行ファイルパス", config.ScriptFullName)
@@ -183,7 +188,7 @@ Public Sub WriteFilterLog(ByRef config As tConfigSettings, ByVal targetWorkbook 
     ' 例: Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "作業員フィルターリスト", config.WorkerFilterList)
     ' ... 他のフィルター条件 ...
 
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M04_LogWriter.WriteFilterLog - Filter log entries written up to row " & nextLogWriteRow -1
+    If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M04_LogWriter.WriteFilterLog - Filter log entries written up to row " & nextLogWriteRow -1
     Exit Sub
 
 WriteFilterLog_Error:
@@ -191,7 +196,7 @@ WriteFilterLog_Error:
     Call SafeWriteErrorLog(targetWorkbook, config.ErrorLogSheetName, "M04_LogWriter", "WriteFilterLog", "フィルターログ書き込みエラー", Err.Number, Err.Description)
 End Sub
 
-Private Sub WriteFilterLogEntry(targetLogSheet As Worksheet, ByRef nextLogRow As Long, itemName As String, itemValue As String)
+Public Sub WriteFilterLogEntry(targetLogSheet As Worksheet, ByRef nextLogRow As Long, itemName As String, itemValue As String)
     ' 検索条件ログシートに単一の項目名と値を書き込み、次の書き込み行を更新します。
     ' Arguments:
     '   targetLogSheet: 書き込み対象のログシート
@@ -208,7 +213,7 @@ Private Sub WriteFilterLogEntry(targetLogSheet As Worksheet, ByRef nextLogRow As
     nextLogRow = nextLogRow + 1
 End Sub
 
-Private Sub WriteFilterLogArrayEntry(targetLogSheet As Worksheet, ByRef nextLogRow As Long, itemName As String, ByRef itemArray() As String)
+Public Sub WriteFilterLogArrayEntry(targetLogSheet As Worksheet, ByRef nextLogRow As Long, itemName As String, ByRef itemArray() As String)
     ' 検索条件ログシートに、文字列配列の内容を単一のエントリとして書き込みます。
     ' 配列が空または未初期化の場合、その状態を示す文字列が書き込まれます。
     ' Arguments:
