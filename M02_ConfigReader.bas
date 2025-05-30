@@ -754,14 +754,14 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
     ' --- G. 出力シート設定 ---
     Dim i As Long ' Declare i for G section loop
     If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Reading Section G: Output Sheet Settings"
-    configStruct.OutputHeaderRowCount = GetCellValue(wsConfig, "O811", "LoadConfiguration (G-1)", m_errorOccurred, "出力シートヘッダー行数", True, "Long", 1, 10) ' Changed isRequired to True, min 1, max 10
+    configStruct.OutputHeaderRowCount = GetCellValue(wsConfig, "O811", "LoadConfiguration (G-1)", m_errorOccurred, "出力シートヘッダー行数", targetWorkbook, configStruct.ErrorLogSheetName, True, "Long", 1, 10)
     
     If Not m_errorOccurred And configStruct.OutputHeaderRowCount > 0 Then
         ReDim configStruct.OutputHeaderContents(1 To configStruct.OutputHeaderRowCount) As String
         For i = 1 To configStruct.OutputHeaderRowCount ' Loop variable i is fine here
             Dim headerCellAddress As String: headerCellAddress = "O" & (811 + i)
             Dim headerVal As String
-            headerVal = Trim(CStr(GetCellValue(wsConfig, headerCellAddress, "LoadConfiguration (G-2)", m_errorOccurred, "出力シートヘッダー内容 " & i & "行目 (" & headerCellAddress & ")", False, "String")))
+            headerVal = Trim(CStr(GetCellValue(wsConfig, headerCellAddress, "LoadConfiguration (G-2)", m_errorOccurred, "出力シートヘッダー内容 " & i & "行目 (" & headerCellAddress & ")", targetWorkbook, configStruct.ErrorLogSheetName, False, "String")))
             
             If m_errorOccurred And Len(headerVal) = 0 Then
                 m_errorOccurred = False ' Clear error if GetCellValue flagged it for an empty optional header line
@@ -771,7 +771,7 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
     End If
 
     Dim outputOpt As String
-    outputOpt = UCase(Trim(CStr(GetCellValue(wsConfig, "O1124", "LoadConfiguration (G-3)", m_errorOccurred, "出力データオプション", False, "String"))))
+    outputOpt = UCase(Trim(CStr(GetCellValue(wsConfig, "O1124", "LoadConfiguration (G-3)", m_errorOccurred, "出力データオプション", targetWorkbook, configStruct.ErrorLogSheetName, False, "String"))))
     If Not m_errorOccurred Then ' Only validate if GetCellValue didn't cause a fatal error
         If outputOpt = "リセット" Or outputOpt = "引継ぎ" Then
             configStruct.OutputDataOption = outputOpt
