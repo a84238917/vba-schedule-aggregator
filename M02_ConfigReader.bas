@@ -633,11 +633,23 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
         For i = 1 To configStruct.OutputHeaderRowCount ' Loop variable i is fine here
             Dim headerCellAddress As String: headerCellAddress = "O" & (811 + i)
             Dim headerVal As String
-            headerVal = Trim(CStr(GetCellValue(wsConfig, headerCellAddress, "LoadConfiguration (G-2)", m_errorOccurred, "出力シートヘッダー内容 " & i & "行目 (" & headerCellAddress & ")", targetWorkbook, configStruct.ErrorLogSheetName, False, "String")))
+            Dim rawHeaderCellVal As Variant ' To store direct output of GetCellValue
+            rawHeaderCellVal = GetCellValue(wsConfig, headerCellAddress, "LoadConfiguration (G-2)", m_errorOccurred, "出力シートヘッダー内容 " & i & "行目 (" & headerCellAddress & ")", targetWorkbook, configStruct.ErrorLogSheetName, False, "String")
 
-            If m_errorOccurred And Len(headerVal) = 0 Then
-                m_errorOccurred = False ' Clear error if GetCellValue flagged it for an empty optional header line
+            If IsError(rawHeaderCellVal) Then
+                headerVal = "" ' Treat cell errors as empty string for header content
+                If DEBUG_MODE_WARNING Then Call ReportConfigError(m_errorOccurred, "LoadConfiguration (G-2)", headerCellAddress, "ヘッダー内容セル (" & headerCellAddress & ") がエラー値「" & CStr(rawHeaderCellVal) & "」です。空文字として扱います。", targetWorkbook, configStruct.ErrorLogSheetName, False, "WARNING_CELL_ERROR")
+                m_errorOccurred = False ' This specific type of error (cell contains #N/A etc.) for an optional header row should not be fatal for LoadConfiguration
+            Else
+                headerVal = Trim(CStr(rawHeaderCellVal))
             End If
+
+            ' If GetCellValue itself caused a fatal read error (m_errorOccurred = True) and headerVal ended up empty,
+            ' we should not clear m_errorOccurred.
+            ' The IsError check above handles non-fatal content issues.
+            ' If m_errorOccurred And Len(headerVal) = 0 Then
+            '    m_errorOccurred = False ' This line might be too broad if GetCellValue had a true read error.
+            ' End If
             configStruct.OutputHeaderContents(i) = headerVal
         Next i
     End If

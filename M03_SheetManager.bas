@@ -97,7 +97,16 @@ Private Function EnsureSheetExists(targetWorkbook As Workbook, sheetNameToEnsure
                 ws.Cells(1, 7).Value = "エラー内容"   ' Old F -> New G
                 ws.Cells(1, 8).Value = "対処内容"     ' Old G -> New H
                 ws.Cells(1, 9).Value = "変数情報"     ' Old H -> New I
+            ElseIf sheetNameToEnsure = config.LogSheetName Then ' New General Log Sheet
+                If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M03_SheetManager.EnsureSheetExists - Creating headers for General Log Sheet: '" & sheetNameToEnsure & "'"
+                ws.Cells(1, 1).Value = "記録日時"     ' Column A
+                ws.Cells(1, 2).Value = "ログレベル"   ' Column B
+                ws.Cells(1, 3).Value = "モジュール"   ' Column C
+                ws.Cells(1, 4).Value = "プロシージャ" ' Column D
+                ws.Cells(1, 5).Value = "メッセージ"   ' Column E
+                ws.Cells(1, 6).Value = "詳細情報"     ' Column F
             ElseIf sheetNameToEnsure = config.SearchConditionLogSheetName Then
+                ' This sheet is for future filter-specific results, distinct from the new general LogSheetName
                 ws.Cells(1, 1).Value = "実行日時"
                 ws.Cells(1, 2).Value = "フィルター項目"
                 ws.Cells(1, 3).Value = "条件"
@@ -202,6 +211,7 @@ Public Function PrepareSheets(ByRef config As tConfigSettings, ByVal targetWorkb
     '   Boolean: True (成功時), False (失敗時)
 
     Dim wsErr As Worksheet
+    Dim wsGenLog As Worksheet ' For the new General Log sheet
     Dim wsFilter As Worksheet
 
     PrepareSheets = False ' Default to failure
@@ -238,19 +248,33 @@ Public Function PrepareSheets(ByRef config As tConfigSettings, ByVal targetWorkb
         Exit Function
     End If
 
-    ' 検索条件ログシートの準備
-    If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M03_SheetManager.PrepareSheets - Preparing Filter Log Sheet: '" & config.SearchConditionLogSheetName & "'"
+    ' 汎用ログシートの準備 (O42で指定されたシート)
+    If config.EnableSheetLogging And Len(config.LogSheetName) > 0 Then
+        If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M03_SheetManager.PrepareSheets - Preparing General Log Sheet: '" & config.LogSheetName & "'"
+        Set wsGenLog = EnsureSheetExists(targetWorkbook, config.LogSheetName, config, "PrepareSheets", True)
+        If wsGenLog Is Nothing Then
+            If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M03_SheetManager.PrepareSheets - Failed to prepare General Log Sheet."
+            Call M04_LogWriter.SafeWriteErrorLog("ERROR", targetWorkbook, config.ErrorLogSheetName, "M03_SheetManager", "PrepareSheets", "汎用ログシート「" & config.LogSheetName & "」の準備に失敗しました。", 0, "EnsureSheetExistsがNothingを返しました")
+            PrepareSheets = False ' Set to false as a part failed
+            Exit Function
+        End If
+        If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M03_SheetManager.PrepareSheets - General Log Sheet '" & config.LogSheetName & "' ready."
+    Else
+        If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M03_SheetManager.PrepareSheets - General Log Sheet preparation skipped (not enabled or name not set)."
+    End If
+
+    ' 検索条件ログシートの準備 (これは将来的なフィルター専用結果用、汎用ログとは別)
+    If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M03_SheetManager.PrepareSheets - Preparing Search Condition Log Sheet (for future filter results): '" & config.SearchConditionLogSheetName & "'"
     Set wsFilter = EnsureSheetExists(targetWorkbook, config.SearchConditionLogSheetName, config, "PrepareSheets", True)
     If wsFilter Is Nothing Then
         If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M03_SheetManager.PrepareSheets - Failed to prepare Search Condition Log Sheet."
         Call M04_LogWriter.SafeWriteErrorLog("ERROR", targetWorkbook, config.ErrorLogSheetName, "M03_SheetManager", "PrepareSheets", "検索条件ログシートの準備に失敗しました。", 0, "EnsureSheetExistsがNothingを返しました")
-        Exit Function ' Returns False
+        PrepareSheets = False ' Set to false as a part failed
+        Exit Function
     End If
-    ' If wsFilter is not Nothing, it implies success for this part.
     If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M03_SheetManager.PrepareSheets - Search Condition Log Sheet ready."
 
-
-    PrepareSheets = True ' All successful
+    PrepareSheets = True ' All successful if we reach here
     If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M03_SheetManager.PrepareSheets - Sheet preparation finished successfully."
     Exit Function
 
