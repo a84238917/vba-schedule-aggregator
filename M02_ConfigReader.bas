@@ -594,13 +594,12 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
     ' After loop, if actualOffsetCount is 0, it means N778:N788 were all empty.
     ' This might be an error if offsets are considered mandatory overall.
     If actualOffsetCount = 0 Then
-        ' Call ReportConfigError(m_errorOccurred, "LoadConfiguration (F-Section)", "N778:N788", "オフセット項目名が一つも定義されていません。", targetWorkbook, configStruct.ErrorLogSheetName, False, "WARNING_CONFIG_EMPTY_SECTION")
-        ' For now, allow it, M06 will just not find any offsets to use.
-        If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M02_ConfigReader.LoadConfiguration - No offset items defined in N778:N788."
-        ' Ensure arrays are at least initialized to avoid UBound errors if accessed later, even if empty.
-        If Not ConfigReader_IsArrayInitialized(configStruct.OffsetItemMasterNames) Then ReDim configStruct.OffsetItemMasterNames(1 To 0)
-        If Not ConfigReader_IsArrayInitialized(configStruct.OffsetDefinitions) Then ReDim configStruct.OffsetDefinitions(1 To 0)
-        If Not ConfigReader_IsArrayInitialized(configStruct.IsOffsetOriginallyEmptyFlags) Then ReDim configStruct.IsOffsetOriginallyEmptyFlags(1 To 0)
+        If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M02_ConfigReader.LoadConfiguration - No offset items defined in N778:N788. Initializing offset arrays as empty."
+        ' Explicitly ReDim to an empty, initialized state.
+        ' This correctly handles the case where the ReDim Preserve loop was never entered.
+        ReDim configStruct.OffsetItemMasterNames(1 To 0)
+        ReDim configStruct.OffsetDefinitions(1 To 0)
+        ReDim configStruct.IsOffsetOriginallyEmptyFlags(1 To 0)
     End If
 
     ' --- G. 出力シート設定 ---
