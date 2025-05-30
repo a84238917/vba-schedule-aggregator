@@ -55,10 +55,10 @@ Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tC
     '   Boolean: データ抽出処理が（部分的にでも）成功した場合はTrue、それ以外はFalse。
 
     Static s_lastSuccessfullyProcessedFilePath As String
-    Static s_lastValidYearInFile As Long
-    Static s_lastValidMonthInFile As Long
+    Static s_lastValidYearInFileAsLong As Long ' Renamed
+    Static s_lastValidMonthInFileAsLong As Long ' Renamed
     Dim anyDateExtractedSuccessfullyInFile As Boolean ' For function return value
-    anyDateExtractedSuccessfullyInFile = False
+    Dim yearMonthEstablishedForThisFile As Boolean ' New local variable
 
     Dim wbKoutei As Workbook, wsKoutei As Worksheet
     Dim currentYear As Long, currentMonth As Long, dayIdx As Long
@@ -68,20 +68,30 @@ Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tC
     Dim eachSheetName As Variant ' For iterating through target sheets
     Dim actualTargetSheetName As String ' To hold the trimmed sheet name
     Dim targetSheetProcessed As Boolean: targetSheetProcessed = False ' Flag to see if at least one sheet was attempted
-    Dim yearVal As Variant, monthVal As Variant ' Moved for wider scope within sheet loop
-    Dim yearStr As String, monthStr As String   ' Moved for wider scope
-    Dim yearMonthValid As Boolean               ' Moved for wider scope
+    Dim yearVal As Variant, monthVal As Variant 
+    Dim yearStr As String, monthStr As String
+    ' Dim yearMonthValid As Boolean ' Replaced by yearMonthEstablishedForThisFile at a higher scope
 
-
+    anyDateExtractedSuccessfullyInFile = False
     ExtractDataFromFile = False ' Default to failure
-    On Error GoTo ExtractDataFromFile_Error
 
     If s_lastSuccessfullyProcessedFilePath <> kouteiFilePath Then
         If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - New file detected. Resetting year/month fallback. Old Path: '" & s_lastSuccessfullyProcessedFilePath & "', New Path: '" & kouteiFilePath & "'"
-        s_lastValidYearInFile = 0 ' Reset for new file
-        s_lastValidMonthInFile = 0
+        s_lastValidYearInFileAsLong = 0 ' Reset for new file
+        s_lastValidMonthInFileAsLong = 0
         s_lastSuccessfullyProcessedFilePath = kouteiFilePath
+        yearMonthEstablishedForThisFile = False ' Reset for new file
+    Else
+        ' Same file as last call in this macro run, check if Y/M was already found
+        yearMonthEstablishedForThisFile = (s_lastValidYearInFileAsLong <> 0 And s_lastValidMonthInFileAsLong <> 0)
+        If yearMonthEstablishedForThisFile Then
+             currentYear = s_lastValidYearInFileAsLong ' Use previously established Y/M
+             currentMonth = s_lastValidMonthInFileAsLong
+             If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - Using previously established Year/Month for file '" & kouteiFilePath & "': " & currentYear & "/" & currentMonth
+        End If
     End If
+    
+    On Error GoTo ExtractDataFromFile_Error ' Main error handler for the function
 
     If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M06_DataExtractor.ExtractDataFromFile - Opening file: '" & kouteiFilePath & "'"
     Set wbKoutei = Workbooks.Open(Filename:=kouteiFilePath, UpdateLinks:=0, ReadOnly:=True)
@@ -121,43 +131,60 @@ Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tC
                 GoTo NextSheetInLoop_M06 ' Skip to next sheet
             End If
 
-            ' --- Year/Month Acquisition with Fallback ---
-            On Error Resume Next ' For reading cell values
-            yearVal = wsKoutei.Range(config.YearCellAddress).Value
-            monthVal = wsKoutei.Range(config.MonthCellAddress).Value
-            On Error GoTo ExtractDataFromFile_Error ' Restore main error handler
+            If yearMonthEstablishedForThisFile Then
+                ' currentYear and currentMonth are already set from static vars for this file
+                If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - Sheet '" & actualTargetSheetName & "': Using pre-established Year/Month: " & currentYear & "/" & currentMonth
+            Else
+                ' Attempt to read and establish Year/Month from this sheet
+                Dim cellAccessErr As Boolean: cellAccessErr = False
+                On Error Resume Next ' For reading cell values specifically
+                yearVal = wsKoutei.Range(config.YearCellAddress).Value
+                If Err.Number <> 0 Then cellAccessErr = True: tempStr = "年セル(" & config.YearCellAddress & ")アクセスエラー: " & Err.Description: Err.Clear
+                
+                monthVal = wsKoutei.Range(config.MonthCellAddress).Value
+                If Err.Number <> 0 And Not cellAccessErr Then cellAccessErr = True: tempStr = "月セル(" & config.MonthCellAddress & ")アクセスエラー: " & Err.Description: Err.Clear
+                On Error GoTo ExtractDataFromFile_Error ' Restore main error handler
 
-            yearStr = Trim(CStr(yearVal))
-            monthStr = Trim(CStr(monthVal))
-            yearMonthValid = False
-
-            If Len(yearStr) > 0 And IsNumeric(yearStr) And CLng(yearStr) >= 1900 And CLng(yearStr) <= 2999 Then
-                If Len(monthStr) > 0 And IsNumeric(monthStr) And CLng(monthStr) >= 1 And CLng(monthStr) <= 12 Then
-                    currentYear = CLng(yearStr)
-                    currentMonth = CLng(monthStr)
-                    s_lastValidYearInFile = currentYear ' Update fallback
-                    s_lastValidMonthInFile = currentMonth
-                    yearMonthValid = True
-                    If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - Sheet '" & actualTargetSheetName & "' - Year: " & currentYear & ", Month: " & currentMonth
+                If cellAccessErr Then
+                    If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - Sheet '" & actualTargetSheetName & "': " & tempStr
+                    If Not filterLogSht Is Nothing Then Call M04_LogWriter.WriteFilterLogEntry(filterLogSht, GetNextFilterLogRow(filterLogSht), "年月取得失敗(セルアクセス)", kouteiFilePath & "/" & actualTargetSheetName & "/" & tempStr)
+                    GoTo NextSheetInLoop_M06 ' Try next sheet
                 End If
-            End If
+                
+                If IsError(yearVal) Then yearVal = Empty ' Convert Error type to Empty for consistent checks
+                If IsError(monthVal) Then monthVal = Empty
 
-            If Not yearMonthValid Then
-                If s_lastValidYearInFile <> 0 And s_lastValidMonthInFile <> 0 Then ' Fallback available
-                    currentYear = s_lastValidYearInFile
-                    currentMonth = s_lastValidMonthInFile
-                    yearMonthValid = True ' Now valid using fallback
-                    tempStr = "年/月取得失敗 (" & actualTargetSheetName & "!" & config.YearCellAddress & "/" & config.MonthCellAddress & "). 前回の有効な年月を使用: " & currentYear & "/" & currentMonth & ". Orig Vals Y='" & CStr(yearVal) & "', M='" & CStr(monthVal) & "'"
-                    If Not filterLogSht Is Nothing Then Call M04_LogWriter.WriteFilterLogEntry(filterLogSht, GetNextFilterLogRow(filterLogSht), "年月取得(フォールバック)", kouteiFilePath & "/" & actualTargetSheetName & "/" & tempStr)
+                yearStr = Trim(CStr(yearVal))
+                monthStr = Trim(CStr(monthVal))
+                Dim tempYearMonthValid As Boolean: tempYearMonthValid = False
+
+                If Len(yearStr) > 0 And IsNumeric(yearStr) And CLng(yearStr) >= 1900 And CLng(yearStr) <= 2999 Then
+                    If Len(monthStr) > 0 And IsNumeric(monthStr) And CLng(monthStr) >= 1 And CLng(monthStr) <= 12 Then
+                        currentYear = CLng(yearStr)
+                        currentMonth = CLng(monthStr)
+                        s_lastValidYearInFileAsLong = currentYear ' Update static vars
+                        s_lastValidMonthInFileAsLong = currentMonth
+                        yearMonthEstablishedForThisFile = True ' Mark as established for this file
+                        tempYearMonthValid = True
+                        tempStr = "ファイル「" & kouteiFilePath & "」の年/月を " & currentYear & "/" & currentMonth & " に確定 (シート「" & actualTargetSheetName & "」より取得)"
+                        If Not filterLogSht Is Nothing Then Call M04_LogWriter.WriteFilterLogEntry(filterLogSht, GetNextFilterLogRow(filterLogSht), "年月確定", tempStr)
+                        If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - " & tempStr
+                    End If
+                End If
+
+                If Not tempYearMonthValid Then
+                    tempStr = "シート「" & actualTargetSheetName & "」の年/月セルの値が不正です。 Y (" & config.YearCellAddress & "):'" & CStr(yearVal) & "', M (" & config.MonthCellAddress & "):'" & CStr(monthVal) & "'"
                     If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - " & tempStr
-                Else ' No fallback, cannot process this sheet for dates
-                    tempStr = "年/月取得失敗、かつ有効なフォールバック値なし (" & actualTargetSheetName & "!" & config.YearCellAddress & "/" & config.MonthCellAddress & "). Values: Y='" & CStr(yearVal) & "', M='" & CStr(monthVal) & "'"
-                    Call M04_LogWriter.SafeWriteErrorLog("ERROR", mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile (YearMonthValidation)", tempStr, 13, "年/月取得エラー(フォールバック不可)")
-                    GoTo NextSheetInLoop_M06 ' Skip to next sheet
+                    If Not filterLogSht Is Nothing Then Call M04_LogWriter.WriteFilterLogEntry(filterLogSht, GetNextFilterLogRow(filterLogSht), "年月取得失敗(値不正)", kouteiFilePath & "/" & actualTargetSheetName & "/" & tempStr)
+                    GoTo NextSheetInLoop_M06 ' Try next sheet
                 End If
             End If
             
             ' --- 日処理ループ ---
+            If Not yearMonthEstablishedForThisFile Then
+                If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - Sheet '" & actualTargetSheetName & "': Year/Month not established, skipping day processing."
+                GoTo NextSheetInLoop_M06
+            End If
             For dayIdx = 1 To config.MaxDaysPerSheet
                 dayCellRow = config.HeaderRowCount + (dayIdx - 1) * config.RowsPerDay + config.DayRowOffset
                 dayVal = wsKoutei.Cells(dayCellRow, config.DayColumnLetter).Value
