@@ -547,3 +547,5 @@ LoadConfiguration_Error_MainHandler:
     Call ReportConfigError(m_errorOccurred, "LoadConfiguration", "N/A", "実行時エラー " & Err.Number & ": " & Err.Description, targetWorkbook, configStruct.ErrorLogSheetName, True, "FATAL_RUNTIME") ' configStruct.ErrorLogSheetName might be empty here
     LoadConfiguration = False
 End Function
+
+[end of M02_ConfigReader.bas]
