@@ -141,26 +141,38 @@ Public Sub WriteFilterLog(ByRef config As tConfigSettings, ByVal targetWorkbook 
     ' これは現在フレームワークであり、今後拡張されてより多くの情報が記録される予定です。
     ' Arguments:
     '   config: 読み込まれた設定情報 (tConfigSettings型)
-    '   targetWorkbook: ログを書き込む対象のワークブック
+    '   targetWorkbook: ログを書き込む対象のワークブック (M01_MainControlから渡される際、これはg_configSettings.MainWorkbookObjectと同等)
 
     Dim wsLog As Worksheet
     Dim nextLogWriteRow As Long
 
     On Error GoTo WriteFilterLog_Error
 
-    If targetWorkbook Is Nothing Or Len(config.SearchConditionLogSheetName) = 0 Then
-        If DEBUG_MODE_WARNING Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - WARNING: M04_LogWriter.WriteFilterLog - Target workbook or SearchConditionLogSheetName is invalid."
+    ' Use new EnableSheetLogging and LogSheetName from config
+    If Not config.EnableSheetLogging Or Len(config.LogSheetName) = 0 Then
+        If DEBUG_MODE_WARNING And config.EnableSheetLogging And Len(config.LogSheetName) = 0 Then
+             Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - WARNING: M04_LogWriter.WriteFilterLog - EnableSheetLogging is TRUE but LogSheetName is empty. Filter log cannot be written."
+        ElseIf Not config.EnableSheetLogging And config.TraceDebugEnabled Then
+             Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M04_LogWriter.WriteFilterLog - EnableSheetLogging is FALSE. Filter log will not be written."
+        End If
+        Exit Sub
+    End If
+
+    If targetWorkbook Is Nothing Then
+        If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M04_LogWriter.WriteFilterLog - targetWorkbook (MainWorkbookObject) is Nothing."
         Exit Sub
     End If
 
     Set wsLog = Nothing ' 初期化
     On Error Resume Next ' シート存在確認のエラーをハンドル
-    Set wsLog = targetWorkbook.Sheets(config.SearchConditionLogSheetName)
+    Set wsLog = targetWorkbook.Sheets(config.LogSheetName) ' Use new LogSheetName
     On Error GoTo WriteFilterLog_Error ' エラーハンドラを元に戻す
 
     If wsLog Is Nothing Then
-        If DEBUG_MODE_WARNING Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - WARNING: M04_LogWriter.WriteFilterLog - SearchConditionLogSheetName '" & config.SearchConditionLogSheetName & "' not found. Should be created by M03_SheetManager."
-        Exit Sub ' Should be created by M03_SheetManager
+        If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M04_LogWriter.WriteFilterLog - LogSheetName '" & config.LogSheetName & "' not found. Should be created by M03_SheetManager if logging was intended."
+        ' SafeWriteErrorLog might be problematic here if ErrorLogSheet itself is the issue or not yet defined.
+        ' This situation suggests a setup problem that should be caught by M03_SheetManager or earlier.
+        Exit Sub
     End If
 
     nextLogWriteRow = wsLog.Cells(wsLog.Rows.Count, 1).End(xlUp).Row + 1
@@ -180,13 +192,13 @@ Public Sub WriteFilterLog(ByRef config As tConfigSettings, ByVal targetWorkbook 
 
     If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M04_LogWriter.WriteFilterLog - Attempting to write initial logs to: '" & wsLog.Name & "'!A" & nextLogWriteRow
 
-    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "マクロ実行", "開始: " & Format(config.StartTime, "yyyy/mm/dd hh:nn:ss"))
-    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "実行ファイルパス", config.ScriptFullName)
-    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "---", "---") ' 区切り線
+    Call WriteFilterLogEntry(config.LogSheetName, nextLogWriteRow, "マクロ実行", "開始: " & Format(config.StartTime, "yyyy/mm/dd hh:nn:ss"))
+    Call WriteFilterLogEntry(config.LogSheetName, nextLogWriteRow, "実行ファイルパス", config.ScriptFullName)
+    Call WriteFilterLogEntry(config.LogSheetName, nextLogWriteRow, "---", "---") ' 区切り線
 
     ' TODO: ここにconfig内の各種フィルター情報を書き出す処理を追加する
-    ' 例: Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "作業員フィルター論理", config.WorkerFilterLogic)
-    ' 例: Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "作業員フィルターリスト", config.WorkerFilterList)
+    ' 例: Call WriteFilterLogEntry(config.LogSheetName, nextLogWriteRow, "作業員フィルター論理", config.WorkerFilterLogic)
+    ' 例: Call WriteFilterLogArrayEntry(config.LogSheetName, nextLogWriteRow, "作業員フィルターリスト", config.WorkerFilterList)
     ' ... 他のフィルター条件 ...
 
     If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M04_LogWriter.WriteFilterLog - Filter log entries written up to row " & nextLogWriteRow -1
@@ -197,31 +209,49 @@ WriteFilterLog_Error:
     Call SafeWriteErrorLog("ERROR", targetWorkbook, config.ErrorLogSheetName, "M04_LogWriter", "WriteFilterLog", "フィルターログ書き込みエラー", Err.Number, Err.Description)
 End Sub
 
-Public Sub WriteFilterLogEntry(targetLogSheet As Worksheet, ByRef nextLogRow As Long, itemName As String, itemValue As String)
-    ' 検索条件ログシートに単一の項目名と値を書き込み、次の書き込み行を更新します。
+Public Sub WriteFilterLogEntry(ByVal logSheetName As String, ByRef nextLogRow As Long, itemName As String, itemValue As String)
+    ' 汎用ログシートに単一の項目名と値を書き込み、次の書き込み行を更新します。
     ' Arguments:
-    '   targetLogSheet: 書き込み対象のログシート
+    '   logSheetName: 書き込み対象のログシート名
     '   nextLogRow: (ByRef) 書き込む行番号。このプロシージャ内でインクリメントされます。
     '   itemName: 書き込む項目名
     '   itemValue: 書き込む値
 
-    If targetLogSheet Is Nothing Then Exit Sub
+    If Not g_configSettings.EnableSheetLogging Or Len(logSheetName) = 0 Then Exit Sub
+    If g_configSettings.MainWorkbookObject Is Nothing Then
+        If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M04_LogWriter.WriteFilterLogEntry - MainWorkbookObject is not set in g_configSettings."
+        Exit Sub
+    End If
+
+    Dim wsLog As Worksheet
+    On Error Resume Next
+    Set wsLog = g_configSettings.MainWorkbookObject.Sheets(logSheetName)
+    On Error GoTo 0
+
+    If wsLog Is Nothing Then
+        If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M04_LogWriter.WriteFilterLogEntry - Log sheet '" & logSheetName & "' not found in main workbook."
+        Exit Sub
+    End If
+
     If nextLogRow < 1 Then nextLogRow = 1 ' 行番号が不正な場合は1行目から
 
-    targetLogSheet.Cells(nextLogRow, 1).Value = Format(Now, "yyyy/mm/dd hh:nn:ss") ' A: 記録日時
-    targetLogSheet.Cells(nextLogRow, 2).Value = itemName                         ' B: 項目名
-    targetLogSheet.Cells(nextLogRow, 3).Value = itemValue                        ' C: 値
+    wsLog.Cells(nextLogRow, 1).Value = Format(Now, "yyyy/mm/dd hh:nn:ss") ' A: 記録日時
+    wsLog.Cells(nextLogRow, 2).Value = itemName                         ' B: 項目名
+    wsLog.Cells(nextLogRow, 3).Value = itemValue                        ' C: 値
     nextLogRow = nextLogRow + 1
 End Sub
 
-Public Sub WriteFilterLogArrayEntry(targetLogSheet As Worksheet, ByRef nextLogRow As Long, itemName As String, ByRef itemArray() As String)
-    ' 検索条件ログシートに、文字列配列の内容を単一のエントリとして書き込みます。
+Public Sub WriteFilterLogArrayEntry(ByVal logSheetName As String, ByRef nextLogRow As Long, itemName As String, ByRef itemArray() As String)
+    ' 汎用ログシートに、文字列配列の内容を単一のエントリとして書き込みます。
     ' 配列が空または未初期化の場合、その状態を示す文字列が書き込まれます。
     ' Arguments:
-    '   targetLogSheet: 書き込み対象のログシート
+    '   logSheetName: 書き込み対象のログシート名
     '   nextLogRow: (ByRef) 書き込む行番号。このプロシージャ内でインクリメントされます。
     '   itemName: 書き込む項目名
     '   itemArray: (ByRef) 書き込む文字列配列
+
+    If Not g_configSettings.EnableSheetLogging Or Len(logSheetName) = 0 Then Exit Sub
+    ' MainWorkbookObject and sheet existence checks are implicitly handled by WriteFilterLogEntry
 
     Dim outputValue As String
 
@@ -234,7 +264,7 @@ Public Sub WriteFilterLogArrayEntry(targetLogSheet As Worksheet, ByRef nextLogRo
     Else
         outputValue = "(リスト未設定)" ' 例: Dim MyArray() のみでReDimされていない状態
     End If
-    Call WriteFilterLogEntry(targetLogSheet, nextLogRow, itemName, outputValue)
+    Call WriteFilterLogEntry(logSheetName, nextLogRow, itemName, outputValue)
 End Sub
 
 Private Function LogWriter_IsArrayInitialized(arr As Variant) As Boolean

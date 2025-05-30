@@ -4,7 +4,7 @@ Option Explicit
 
 Private Function LogExtractor_IsArrayInitialized(arr As Variant) As Boolean
     ' 配列が有効に初期化されているか（少なくとも1つの要素を持つか）を確認します。
-    ' Variant型が配列でない場合、または配列であっても要素が割り当てられていない場合はFalseを返します。
+    ' Variant型が配列でない場合、または配列であっても要素が割り当てられていない場合（Dim arr() のみでReDimされていない状態など）はFalseを返します。
     On Error GoTo NotAnArrayOrNotInitialized_M06
     If IsArray(arr) Then
         Dim lBoundCheck As Long
@@ -16,16 +16,29 @@ NotAnArrayOrNotInitialized_M06:
     LogExtractor_IsArrayInitialized = False
 End Function
 
-Private Function GetNextFilterLogRow(filterLogSheet As Worksheet) As Long
-    ' 指定されたフィルターログシートのA列で、次に書き込むべき行番号を取得します。
-    If filterLogSheet Is Nothing Then
-        GetNextFilterLogRow = 1 ' フォールバック
+Private Function GetNextFilterLogRow(ByVal logSheetName As String, ByVal mainWB As Workbook) As Long
+    ' 指定されたログシート名とワークブックに基づき、次に書き込むべき行番号を取得します。
+    If mainWB Is Nothing Or Len(logSheetName) = 0 Then
+        GetNextFilterLogRow = 1 ' Fallback
+        If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M06_DataExtractor.GetNextFilterLogRow - mainWB is Nothing or logSheetName is empty."
         Exit Function
     End If
-    If Application.WorksheetFunction.CountA(filterLogSheet.Columns(1)) = 0 Then
+
+    Dim ws As Worksheet
+    On Error Resume Next
+    Set ws = mainWB.Sheets(logSheetName)
+    On Error GoTo 0 ' Or a local error handler for this function
+
+    If ws Is Nothing Then
+        GetNextFilterLogRow = 1 ' Fallback if sheet not found
+        If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M06_DataExtractor.GetNextFilterLogRow - Sheet '" & logSheetName & "' not found in workbook '" & mainWB.Name & "'."
+        Exit Function
+    End If
+
+    If Application.WorksheetFunction.CountA(ws.Columns(1)) = 0 Then
         GetNextFilterLogRow = 1
     Else
-        GetNextFilterLogRow = filterLogSheet.Cells(filterLogSheet.Rows.Count, 1).End(xlUp).Row + 1
+        GetNextFilterLogRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row + 1
     End If
 End Function
 
@@ -79,44 +92,32 @@ End Function
 
 Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tConfigSettings, ByVal mainWorkbook As Workbook, Optional wsOutput As Worksheet = Nothing, Optional ByRef outputNextRow As Long = 0, Optional ByVal currentFileNum As Long = 0, Optional ByRef totalExtractedCount As Long = 0) As Boolean
     ' 個別工程表ファイルからデータを抽出し、フィルターログに年月日の基本情報を記録します。
-    ' Arguments:
-    '   kouteiFilePath: (I) String型。処理対象の工程表ファイルパス。
-    '   config: (I) tConfigSettings型。各種設定情報。
-    '   mainWorkbook: (I) Workbook型。マクロ本体（ログシートが存在する）のワークブックオブジェクト。
-    '   wsOutput: (I/O) Worksheet型 (Optional)。抽出データの出力先シート。
-    '   outputNextRow: (I/O) Long型 (Optional)。出力シートの次の書き込み行。
-    '   currentFileNum: (I) Long型 (Optional)。現在処理中のファイル番号 (ログ用)。
-    '   totalExtractedCount: (I/O) Long型 (Optional)。抽出成功した総件数。
-    ' Returns:
-    '   Boolean: データ抽出処理が（部分的にでも）成功した場合はTrue、それ以外はFalse。
 
     Static s_lastSuccessfullyProcessedFilePath As String
-    Static s_lastValidYearInFileAsLong As Long ' Renamed
-    Static s_lastValidMonthInFileAsLong As Long ' Renamed
-    Dim anyDateExtractedSuccessfullyInFile As Boolean ' For function return value
-    Dim yearMonthEstablishedForThisFile As Boolean ' New local variable
+    Static s_lastValidYearInFileAsLong As Long
+    Static s_lastValidMonthInFileAsLong As Long
+    Dim anyDateExtractedSuccessfullyInFile As Boolean
+    Dim yearMonthEstablishedForThisFile As Boolean
 
     Dim wbKoutei As Workbook, wsKoutei As Worksheet
     Dim currentYear As Long, currentMonth As Long, dayIdx As Long
     Dim dayVal As Variant, dateInLoop As Date
     Dim dayCellRow As Long, tempStr As String
-    Dim filterLogSht As Worksheet
-    Dim eachSheetName As Variant ' For iterating through target sheets
-    Dim actualTargetSheetName As String ' To hold the trimmed sheet name
-    Dim targetSheetProcessed As Boolean: targetSheetProcessed = False ' Flag to see if at least one sheet was attempted
+    Dim eachSheetName As Variant
+    Dim actualTargetSheetName As String
+    Dim targetSheetProcessed As Boolean: targetSheetProcessed = False
     Dim yearVal As Variant, monthVal As Variant
     Dim yearStr As String, monthStr As String
-    ' Dim yearMonthValid As Boolean ' Replaced by yearMonthEstablishedForThisFile at a higher scope
 
-    ' New variables for dynamic header mapping
-    Dim outputActualHeaderNames() As String
+    ' Variables for dynamic header mapping and data storage
+    Dim outputActualHeaderNames() As String ' Will be 0-based from Split
     Dim workerHeaderMap As Object ' Scripting.Dictionary
-    Dim workerSequence As Long
+    Dim workerHeaderSequence As Long
     Dim sagyoinMasterIndex As Long
     Dim baseSagyoinOffset As tOffset
     Dim baseSagyoinOffsetIsEmpty As Boolean
-    Dim oneRowOfExtractedData() As Variant
-    Dim outputColIdx As Long, colIdx As Long ' Loop counters
+    Dim oneRowOfExtractedData() As Variant ' Will be 0-based to match outputActualHeaderNames
+    Dim outputColIdx As Long, colIdxForWorkerMap As Long ' Loop counters for headers
     Dim currentOutputHeader As String
     Dim currentDataValue As Variant
     Dim masterIdx As Long
@@ -125,148 +126,129 @@ Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tC
     Dim keyHeaderName As Variant
     Dim keyHeaderNamesForBlankCheck As Variant
 
-
     Dim processIdx As Long
     Dim currentBaseRowForProcess As Long, currentBaseColForProcess As Long
     Dim colOffsetAccumulator As Long
-    Dim workerIdx As Long, workerName As String, actualExtractedWorkerCount As Long ' workerActualCol removed
+    Dim workerName As String, actualExtractedWorkerCount As Long
     Dim isRowAllEmpty As Boolean
     Dim maxWorkersForThisProcess As Long
+    Dim i_m06 As Long ' Generic loop counter for arrays
 
     anyDateExtractedSuccessfullyInFile = False
     ExtractDataFromFile = False ' Default to failure
 
     If s_lastSuccessfullyProcessedFilePath <> kouteiFilePath Then
         If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - New file detected. Resetting year/month fallback. Old Path: '" & s_lastSuccessfullyProcessedFilePath & "', New Path: '" & kouteiFilePath & "'"
-        s_lastValidYearInFileAsLong = 0 ' Reset for new file
+        s_lastValidYearInFileAsLong = 0
         s_lastValidMonthInFileAsLong = 0
         s_lastSuccessfullyProcessedFilePath = kouteiFilePath
-        yearMonthEstablishedForThisFile = False ' Reset for new file
+        yearMonthEstablishedForThisFile = False
     Else
-        ' Same file as last call in this macro run, check if Y/M was already found
         yearMonthEstablishedForThisFile = (s_lastValidYearInFileAsLong <> 0 And s_lastValidMonthInFileAsLong <> 0)
         If yearMonthEstablishedForThisFile Then
-             currentYear = s_lastValidYearInFileAsLong ' Use previously established Y/M
+             currentYear = s_lastValidYearInFileAsLong
              currentMonth = s_lastValidMonthInFileAsLong
              If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - Using previously established Year/Month for file '" & kouteiFilePath & "': " & currentYear & "/" & currentMonth
         End If
     End If
 
-    On Error GoTo ExtractDataFromFile_Error ' Main error handler for the function
+    On Error GoTo ExtractDataFromFile_Error
 
     If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M06_DataExtractor.ExtractDataFromFile - Opening file: '" & kouteiFilePath & "'"
     Set wbKoutei = Workbooks.Open(Filename:=kouteiFilePath, UpdateLinks:=0, ReadOnly:=True)
-    If wbKoutei Is Nothing Then Exit Function ' Should be caught by error handler, but as a safeguard
+    If wbKoutei Is Nothing Then GoTo ExtractDataFromFile_Finally ' Ensure cleanup
 
     ' --- I. Preparation and Header Analysis ---
-    ' 1. Declare outputActualHeaderNames (done above)
-    ' 2. Parse Output Headers
-    If config.OutputHeaderRowCount > 0 And LogExtractor_IsArrayInitialized(config.OutputHeaderContents) Then
-        If Len(config.OutputHeaderContents(1)) > 0 Then ' Ensure the first header row string is not empty
-            outputActualHeaderNames = Split(config.OutputHeaderContents(1), vbTab)
-            If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: Output headers parsed: " & Join(outputActualHeaderNames, "|")
-        Else
-            Call M04_LogWriter.SafeWriteErrorLog("ERROR", mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", "出力シートヘッダーの1行目(O812)が空です。列名を取得できません。", 0, kouteiFilePath)
-            ExtractDataFromFile = False
-            GoTo ExtractDataFromFile_Finally
-        End If
-    Else
-        Call M04_LogWriter.SafeWriteErrorLog("ERROR", mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", "出力シートヘッダーがConfigで定義されていません (OutputHeaderRowCount or OutputHeaderContents)。処理を続行できません。", 0, kouteiFilePath)
+    If Not (config.OutputHeaderRowCount > 0 And LogExtractor_IsArrayInitialized(config.OutputHeaderContents) And config.OutputHeaderRowCount <= UBound(config.OutputHeaderContents) And config.OutputHeaderRowCount >= LBound(config.OutputHeaderContents)) Then
+        Call M04_LogWriter.SafeWriteErrorLog("CRITICAL", mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", "出力ヘッダーがConfig G-2で定義されていないか行数指定が不正なため、データマッピングできません。", 0, kouteiFilePath)
         ExtractDataFromFile = False
         GoTo ExtractDataFromFile_Finally
     End If
+    outputActualHeaderNames = Split(config.OutputHeaderContents(config.OutputHeaderRowCount), vbTab) ' 0-based array
+    If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: Output headers for mapping (last row of config headers): " & Join(outputActualHeaderNames, "|")
 
-    ' 3. Worker Column Mapping
     Set workerHeaderMap = CreateObject("Scripting.Dictionary")
-    workerSequence = 0
+    workerHeaderSequence = 0
     If LogExtractor_IsArrayInitialized(outputActualHeaderNames) Then
-        For colIdx = LBound(outputActualHeaderNames) To UBound(outputActualHeaderNames)
-            If Left(outputActualHeaderNames(colIdx), DEFAULT_WORKER_HEADER_PREFIX_LENGTH) = DEFAULT_WORKER_HEADER_PREFIX Then
-                workerSequence = workerSequence + 1
-                workerHeaderMap(outputActualHeaderNames(colIdx)) = workerSequence ' Map header name to its sequence
+        For colIdxForWorkerMap = LBound(outputActualHeaderNames) To UBound(outputActualHeaderNames)
+            Dim tempHeaderNameForWorkerCheck As String: tempHeaderNameForWorkerCheck = Trim(outputActualHeaderNames(colIdxForWorkerMap))
+            If Left(tempHeaderNameForWorkerCheck, DEFAULT_WORKER_HEADER_PREFIX_LENGTH) = DEFAULT_WORKER_HEADER_PREFIX Then
+                workerHeaderSequence = workerHeaderSequence + 1
+                workerHeaderMap(tempHeaderNameForWorkerCheck) = workerHeaderSequence
             End If
-        Next colIdx
+        Next colIdxForWorkerMap
     End If
     If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: Worker header map created with " & workerHeaderMap.Count & " items."
 
-    ' 4. Find "作業員" Base Offset
-    sagyoinMasterIndex = -1 ' Default if not found
-    baseSagyoinOffsetIsEmpty = True ' Default to true
+    sagyoinMasterIndex = -1
+    baseSagyoinOffsetIsEmpty = True
     If LogExtractor_IsArrayInitialized(config.OffsetItemMasterNames) Then
-        For masterIdx = LBound(config.OffsetItemMasterNames) To UBound(config.OffsetItemMasterNames)
-            If config.OffsetItemMasterNames(masterIdx) = DEFAULT_WORKER_HEADER_PREFIX Then ' "作業員"
-                sagyoinMasterIndex = masterIdx
-                baseSagyoinOffset = config.OffsetDefinitions(masterIdx)
-                baseSagyoinOffsetIsEmpty = config.IsOffsetOriginallyEmptyFlags(masterIdx)
-                If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: Base sagyoin offset found at index " & sagyoinMasterIndex & ", R=" & baseSagyoinOffset.Row & ", C=" & baseSagyoinOffset.Col & ", IsEmptyOrig=" & baseSagyoinOffsetIsEmpty
+        For i_m06 = LBound(config.OffsetItemMasterNames) To UBound(config.OffsetItemMasterNames)
+            If config.OffsetItemMasterNames(i_m06) = DEFAULT_WORKER_HEADER_PREFIX Then
+                sagyoinMasterIndex = i_m06
+                If LogExtractor_IsArrayInitialized(config.OffsetDefinitions) And sagyoinMasterIndex <= UBound(config.OffsetDefinitions) And sagyoinMasterIndex >= LBound(config.OffsetDefinitions) Then
+                    baseSagyoinOffset = config.OffsetDefinitions(sagyoinMasterIndex)
+                End If
+                If LogExtractor_IsArrayInitialized(config.IsOffsetOriginallyEmptyFlags) And sagyoinMasterIndex <= UBound(config.IsOffsetOriginallyEmptyFlags) And sagyoinMasterIndex >= LBound(config.IsOffsetOriginallyEmptyFlags) Then
+                    baseSagyoinOffsetIsEmpty = config.IsOffsetOriginallyEmptyFlags(sagyoinMasterIndex)
+                End If
+                If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: Base sagyoin offset '" & DEFAULT_WORKER_HEADER_PREFIX & "' found at master index " & sagyoinMasterIndex & ", R=" & baseSagyoinOffset.Row & ", C=" & baseSagyoinOffset.Col & ", IsEmptyOrig=" & baseSagyoinOffsetIsEmpty
                 Exit For
             End If
-        Next masterIdx
+        Next i_m06
     End If
 
     If sagyoinMasterIndex = -1 Then
-        If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - WARNING: M06_DataExtractor.ExtractDataFromFile - Base '作業員' offset not defined in Config F-section. Worker names cannot be extracted by offset."
-        Call M04_LogWriter.SafeWriteErrorLog("WARNING", mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", "基本の「作業員」オフセットがConfigシートのFセクションに定義されていません。作業員名は抽出できません。", 0, kouteiFilePath)
+        If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - WARNING: Base '" & DEFAULT_WORKER_HEADER_PREFIX & "' offset not found in Config Section F. Worker names cannot be extracted by offset."
+        ' This is a warning, not fatal for the whole extraction.
     ElseIf baseSagyoinOffsetIsEmpty Then
-        If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - WARNING: M06_DataExtractor.ExtractDataFromFile - Base '作業員' offset is defined but its value is empty. Worker names cannot be extracted by offset."
-        Call M04_LogWriter.SafeWriteErrorLog("WARNING", mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", "基本の「作業員」オフセットは定義されていますが、値が空です。作業員名は抽出できません。", 0, kouteiFilePath)
-    End If
-
-    ' --- フィルターログシート取得 (最初に取得試行) ---
-    On Error Resume Next ' Temporarily disable error handling for sheet existence check
-    Set filterLogSht = mainWorkbook.Worksheets(config.SearchConditionLogSheetName)
-    On Error GoTo ExtractDataFromFile_Error ' Restore main error handler
-
-    If filterLogSht Is Nothing Then
-        If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M06_DataExtractor.ExtractDataFromFile - Filter log sheet '" & config.SearchConditionLogSheetName & "' not found. Date extraction logging will be skipped."
-        ' Proceeding without filter logging for this file if sheet is missing, but error log should have info from PrepareSheets
+        If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - WARNING: Base '" & DEFAULT_WORKER_HEADER_PREFIX & "' offset is defined but its value is empty. Worker names cannot be extracted by offset."
+        ' Also a warning.
     End If
 
     ' --- 対象シートループ ---
     If LogExtractor_IsArrayInitialized(config.TargetSheetNames) And UBound(config.TargetSheetNames) >= LBound(config.TargetSheetNames) Then
         For Each eachSheetName In config.TargetSheetNames
             actualTargetSheetName = Trim(CStr(eachSheetName))
-            targetSheetProcessed = True ' Mark that we are attempting to process a sheet
+            targetSheetProcessed = True
 
             If Len(actualTargetSheetName) = 0 Then
                 If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - Empty sheet name found in TargetSheetNames array. Skipping."
-                GoTo NextSheetInLoop_M06 ' Skip if sheet name is empty
+                GoTo NextSheetInLoop_M06
             End If
 
             If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - Attempting to process sheet: '" & actualTargetSheetName & "' in file '" & kouteiFilePath & "'"
 
-            Set wsKoutei = Nothing ' Reset for current sheet
+            Set wsKoutei = Nothing
             On Error Resume Next
             Set wsKoutei = wbKoutei.Worksheets(actualTargetSheetName)
-            On Error GoTo ExtractDataFromFile_Error ' Restore main error handler
+            On Error GoTo ExtractDataFromFile_Error
 
             If wsKoutei Is Nothing Then
                 tempStr = "シートが見つかりません: '" & actualTargetSheetName & "'"
                 Call M04_LogWriter.SafeWriteErrorLog("ERROR", mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile (SheetCheck)", tempStr, 0, kouteiFilePath)
-                GoTo NextSheetInLoop_M06 ' Skip to next sheet
+                GoTo NextSheetInLoop_M06
             End If
 
             If yearMonthEstablishedForThisFile Then
-                ' currentYear and currentMonth are already set from static vars for this file
                 If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - Sheet '" & actualTargetSheetName & "': Using pre-established Year/Month: " & currentYear & "/" & currentMonth
             Else
-                ' Attempt to read and establish Year/Month from this sheet
                 Dim cellAccessErr As Boolean: cellAccessErr = False
-                On Error Resume Next ' For reading cell values specifically
+                On Error Resume Next
                 yearVal = wsKoutei.Range(config.YearCellAddress).Value
                 If Err.Number <> 0 Then cellAccessErr = True: tempStr = "年セル(" & config.YearCellAddress & ")アクセスエラー: " & Err.Description: Err.Clear
 
                 monthVal = wsKoutei.Range(config.MonthCellAddress).Value
                 If Err.Number <> 0 And Not cellAccessErr Then cellAccessErr = True: tempStr = "月セル(" & config.MonthCellAddress & ")アクセスエラー: " & Err.Description: Err.Clear
-                On Error GoTo ExtractDataFromFile_Error ' Restore main error handler
+                On Error GoTo ExtractDataFromFile_Error
 
                 If cellAccessErr Then
                     If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - Sheet '" & actualTargetSheetName & "': " & tempStr
-                    If Not filterLogSht Is Nothing Then Call M04_LogWriter.WriteFilterLogEntry(filterLogSht, GetNextFilterLogRow(filterLogSht), "年月取得失敗(セルアクセス)", kouteiFilePath & "/" & actualTargetSheetName & "/" & tempStr)
-                    GoTo NextSheetInLoop_M06 ' Try next sheet
+                    Call M04_LogWriter.WriteFilterLogEntry(config.LogSheetName, GetNextFilterLogRow(config.LogSheetName, mainWorkbook), "年月取得失敗(セルアクセス)", kouteiFilePath & "/" & actualTargetSheetName & "/" & tempStr)
+                    GoTo NextSheetInLoop_M06
                 End If
 
-                If IsError(yearVal) Then yearVal = Empty ' Convert Error type to Empty for consistent checks
+                If IsError(yearVal) Then yearVal = Empty
                 If IsError(monthVal) Then monthVal = Empty
 
                 yearStr = Trim(CStr(yearVal))
@@ -277,12 +259,12 @@ Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tC
                     If Len(monthStr) > 0 And IsNumeric(monthStr) And CLng(monthStr) >= 1 And CLng(monthStr) <= 12 Then
                         currentYear = CLng(yearStr)
                         currentMonth = CLng(monthStr)
-                        s_lastValidYearInFileAsLong = currentYear ' Update static vars
+                        s_lastValidYearInFileAsLong = currentYear
                         s_lastValidMonthInFileAsLong = currentMonth
-                        yearMonthEstablishedForThisFile = True ' Mark as established for this file
+                        yearMonthEstablishedForThisFile = True
                         tempYearMonthValid = True
                         tempStr = "ファイル「" & kouteiFilePath & "」の年/月を " & currentYear & "/" & currentMonth & " に確定 (シート「" & actualTargetSheetName & "」より取得)"
-                        If Not filterLogSht Is Nothing Then Call M04_LogWriter.WriteFilterLogEntry(filterLogSht, GetNextFilterLogRow(filterLogSht), "年月確定", tempStr)
+                        Call M04_LogWriter.WriteFilterLogEntry(config.LogSheetName, GetNextFilterLogRow(config.LogSheetName, mainWorkbook), "年月確定", tempStr)
                         If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - " & tempStr
                     End If
                 End If
@@ -290,16 +272,16 @@ Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tC
                 If Not tempYearMonthValid Then
                     tempStr = "シート「" & actualTargetSheetName & "」の年/月セルの値が不正です。 Y (" & config.YearCellAddress & "):'" & CStr(yearVal) & "', M (" & config.MonthCellAddress & "):'" & CStr(monthVal) & "'"
                     If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - " & tempStr
-                    If Not filterLogSht Is Nothing Then Call M04_LogWriter.WriteFilterLogEntry(filterLogSht, GetNextFilterLogRow(filterLogSht), "年月取得失敗(値不正)", kouteiFilePath & "/" & actualTargetSheetName & "/" & tempStr)
-                    GoTo NextSheetInLoop_M06 ' Try next sheet
+                    Call M04_LogWriter.WriteFilterLogEntry(config.LogSheetName, GetNextFilterLogRow(config.LogSheetName, mainWorkbook), "年月取得失敗(値不正)", kouteiFilePath & "/" & actualTargetSheetName & "/" & tempStr)
+                    GoTo NextSheetInLoop_M06
                 End If
             End If
 
-            ' --- 日処理ループ ---
             If Not yearMonthEstablishedForThisFile Then
                 If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - Sheet '" & actualTargetSheetName & "': Year/Month not established, skipping day processing."
                 GoTo NextSheetInLoop_M06
             End If
+
             For dayIdx = 1 To config.MaxDaysPerSheet
                 dayCellRow = config.HeaderRowCount + (dayIdx - 1) * config.RowsPerDay + config.DayRowOffset
                 dayVal = wsKoutei.Cells(dayCellRow, config.DayColumnLetter).Value
@@ -312,52 +294,50 @@ Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tC
                 If Not IsNumeric(dayVal) Then
                     tempStr = "日付セルの値が数値ではありません (" & config.DayColumnLetter & dayCellRow & "): '" & CStr(dayVal) & "'"
                     If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - " & tempStr & ". Skipping."
-                    If Not filterLogSht Is Nothing Then Call M04_LogWriter.WriteFilterLogEntry(filterLogSht, GetNextFilterLogRow(filterLogSht), "日付取得失敗(非数値)", kouteiFilePath & "/" & actualTargetSheetName & "/" & tempStr)
+                    Call M04_LogWriter.WriteFilterLogEntry(config.LogSheetName, GetNextFilterLogRow(config.LogSheetName, mainWorkbook), "日付取得失敗(非数値)", kouteiFilePath & "/" & actualTargetSheetName & "/" & tempStr)
                     GoTo NextDayInLoop_M06
                 End If
 
                 Dim dayLong As Long
-                dayLong = CLng(dayVal) ' Convert to Long once
+                dayLong = CLng(dayVal)
 
-                If dayLong <= 0 Or dayLong > 31 Then ' Basic day range check
+                If dayLong <= 0 Or dayLong > 31 Then
                     tempStr = "日付セルの値が範囲外(1-31)です (" & config.DayColumnLetter & dayCellRow & "): " & dayLong
                     If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - " & tempStr & ". Skipping."
-                    If Not filterLogSht Is Nothing Then Call M04_LogWriter.WriteFilterLogEntry(filterLogSht, GetNextFilterLogRow(filterLogSht), "日付取得失敗(範囲外)", kouteiFilePath & "/" & actualTargetSheetName & "/" & tempStr)
+                    Call M04_LogWriter.WriteFilterLogEntry(config.LogSheetName, GetNextFilterLogRow(config.LogSheetName, mainWorkbook), "日付取得失敗(範囲外)", kouteiFilePath & "/" & actualTargetSheetName & "/" & tempStr)
                     GoTo NextDayInLoop_M06
                 End If
 
-                On Error Resume Next ' For DateSerial error only
+                On Error Resume Next
                 dateInLoop = DateSerial(currentYear, currentMonth, dayLong)
                 If Err.Number <> 0 Then
-                    On Error GoTo ExtractDataFromFile_Error ' Restore main error handler
+                    On Error GoTo ExtractDataFromFile_Error
                     tempStr = "DateSerialで無効な日付です (" & currentYear & "/" & currentMonth & "/" & dayLong & " at " & config.DayColumnLetter & dayCellRow & "). Error: " & Err.Description
                     If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - " & tempStr & ". Skipping."
-                    If Not filterLogSht Is Nothing Then Call M04_LogWriter.WriteFilterLogEntry(filterLogSht, GetNextFilterLogRow(filterLogSht), "日付検証エラー(DateSerial)", kouteiFilePath & "/" & actualTargetSheetName & "/" & tempStr)
+                    Call M04_LogWriter.WriteFilterLogEntry(config.LogSheetName, GetNextFilterLogRow(config.LogSheetName, mainWorkbook), "日付検証エラー(DateSerial)", kouteiFilePath & "/" & actualTargetSheetName & "/" & tempStr)
                     Err.Clear
                     GoTo NextDayInLoop_M06
                 End If
-                On Error GoTo ExtractDataFromFile_Error ' Restore main error handler
+                On Error GoTo ExtractDataFromFile_Error
 
-                ' --- Process Loop for each process block within the current day ---
                 For processIdx = 0 To config.ProcessesPerDay - 1
                     If LogExtractor_IsArrayInitialized(outputActualHeaderNames) Then
-                        ReDim oneRowOfExtractedData(LBound(outputActualHeaderNames) To UBound(outputActualHeaderNames))
+                        ReDim oneRowOfExtractedData(LBound(outputActualHeaderNames) To UBound(outputActualHeaderNames)) '0-based
                     Else
-                        ' This case should have been caught by the header check at the function start
-                        Call M04_LogWriter.SafeWriteErrorLog("ERROR", mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", "OutputActualHeaderNamesが初期化されていません。処理を中断します。", 0, kouteiFilePath & "/" & actualTargetSheetName)
-                        GoTo NextDayInLoop_M06 ' Skip rest of day processing for this sheet
+                        Call M04_LogWriter.SafeWriteErrorLog("CRITICAL", mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", "outputActualHeaderNames が初期化されていません。致命的なエラー。", 0, kouteiFilePath)
+                        ExtractDataFromFile = False
+                        GoTo ExtractDataFromFile_Finally
                     End If
 
-                    actualExtractedWorkerCount = 0 ' Reset for each process block
+                    actualExtractedWorkerCount = 0
                     colOffsetAccumulator = 0
                     If processIdx > 0 Then
                         Dim k As Long
                         For k = 0 To processIdx - 1
-                            ' Ensure ProcessPatternColNumbers is valid before accessing
                             If LogExtractor_IsArrayInitialized(config.ProcessPatternColNumbers) And _
                                LBound(config.ProcessPatternColNumbers) <= 1 And UBound(config.ProcessPatternColNumbers) >= 1 Then
                                 If LogExtractor_IsArrayInitialized(config.ProcessPatternColNumbers(1)) And _
-                                   k <= UBound(config.ProcessPatternColNumbers(1)) Then
+                                   k <= UBound(config.ProcessPatternColNumbers(1)) And k >= LBound(config.ProcessPatternColNumbers(1)) Then
                                     colOffsetAccumulator = colOffsetAccumulator + config.ProcessPatternColNumbers(1)(k)
                                 Else
                                     If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - WARNING: ProcessPatternColNumbers(1) inner array not valid for k=" & k
@@ -372,10 +352,9 @@ Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tC
 
                     If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: Processing Day " & Format(dateInLoop, "yyyy-mm-dd") & ", ProcessIdx " & processIdx & ", BaseCell R" & currentBaseRowForProcess & "C" & currentBaseColForProcess
 
-                    ' --- New Inner Loop for Data Population ---
-                    For outputColIdx = LBound(outputActualHeaderNames) To UBound(outputActualHeaderNames)
-                        currentOutputHeader = outputActualHeaderNames(outputColIdx)
-                        currentDataValue = "" ' Default to empty
+                    For outputColIdx = LBound(outputActualHeaderNames) To UBound(outputActualHeaderNames) ' Should be 0-based
+                        currentOutputHeader = Trim(outputActualHeaderNames(outputColIdx))
+                        currentDataValue = ""
 
                         If currentOutputHeader = "日付" Then
                             currentDataValue = Format(dateInLoop, "yyyy/mm/dd(aaa)")
@@ -385,56 +364,57 @@ Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tC
                             currentDataValue = currentMonth
                         ElseIf currentOutputHeader = "シート名" Then
                             currentDataValue = actualTargetSheetName
-                        ElseIf currentOutputHeader = "管内1" And processIdx <= UBound(config.ProcessDetails) Then
+                        ElseIf currentOutputHeader = "管内1" And processIdx <= UBound(config.ProcessDetails) And processIdx >= LBound(config.ProcessDetails) Then
                             currentDataValue = config.ProcessDetails(processIdx).Kankatsu1
-                        ElseIf currentOutputHeader = "管内2" And processIdx <= UBound(config.ProcessDetails) Then
+                        ElseIf currentOutputHeader = "管内2" And processIdx <= UBound(config.ProcessDetails) And processIdx >= LBound(config.ProcessDetails) Then
                             currentDataValue = config.ProcessDetails(processIdx).Kankatsu2
-                        ' Add Bunrui1-3 here if they become part of ProcessDetails or specific config lists later
                         ElseIf workerHeaderMap.Exists(currentOutputHeader) Then
                             Dim workerSequenceNum As Long: workerSequenceNum = workerHeaderMap(currentOutputHeader)
-                            ' currentDataValue is already defaulted to ""
                             If sagyoinMasterIndex <> -1 And Not baseSagyoinOffsetIsEmpty Then
-                                ' Determine maxWorkersForThisProcess safely
-                                maxWorkersForThisProcess = 0
+                                maxWorkersForThisProcess = 0 ' Default
                                 If LogExtractor_IsArrayInitialized(config.ProcessPatternColNumbers) And _
                                    LBound(config.ProcessPatternColNumbers) <= 1 And UBound(config.ProcessPatternColNumbers) >= 1 Then
                                     If LogExtractor_IsArrayInitialized(config.ProcessPatternColNumbers(1)) And _
-                                       processIdx <= UBound(config.ProcessPatternColNumbers(1)) Then
+                                       processIdx <= UBound(config.ProcessPatternColNumbers(1)) And processIdx >= LBound(config.ProcessPatternColNumbers(1)) Then
                                         maxWorkersForThisProcess = config.ProcessPatternColNumbers(1)(processIdx)
                                     End If
                                 End If
 
                                 If workerSequenceNum > 0 And workerSequenceNum <= Application.WorksheetFunction.Min(MAX_WORKERS_TO_EXTRACT, maxWorkersForThisProcess) Then
-                                    Dim sagyoinOffsetCol As Long: sagyoinOffsetCol = baseSagyoinOffset.Col + (workerSequenceNum - 1)
-                                    currentDataValue = GetValueFromOffset(wsKoutei, currentBaseRowForProcess, currentBaseColForProcess, CreateOffset(baseSagyoinOffset.Row, sagyoinOffsetCol), currentOutputHeader, config, mainWorkbook)
+                                    Dim sagyoinActualOffset As tOffset
+                                    sagyoinActualOffset.Row = baseSagyoinOffset.Row
+                                    sagyoinActualOffset.Col = baseSagyoinOffset.Col + (workerSequenceNum - 1)
+                                    currentDataValue = GetValueFromOffset(wsKoutei, currentBaseRowForProcess, currentBaseColForProcess, sagyoinActualOffset, currentOutputHeader, config, mainWorkbook)
                                     If Len(CStr(currentDataValue)) > 0 Then actualExtractedWorkerCount = actualExtractedWorkerCount + 1
                                 End If
                             End If
-                        Else ' Attempt to find in OffsetItemMasterNames
-                            ' currentDataValue is already defaulted to ""
+                        Else
                             foundMasterOffset = False
                             If LogExtractor_IsArrayInitialized(config.OffsetItemMasterNames) Then
                                 For masterIdx = LBound(config.OffsetItemMasterNames) To UBound(config.OffsetItemMasterNames)
                                     If config.OffsetItemMasterNames(masterIdx) = currentOutputHeader Then
-                                        If Not config.IsOffsetOriginallyEmptyFlags(masterIdx) Then
-                                            currentDataValue = GetValueFromOffset(wsKoutei, currentBaseRowForProcess, currentBaseColForProcess, config.OffsetDefinitions(masterIdx), currentOutputHeader, config, mainWorkbook)
+                                        If LogExtractor_IsArrayInitialized(config.IsOffsetOriginallyEmptyFlags) And masterIdx <= UBound(config.IsOffsetOriginallyEmptyFlags) And masterIdx >= LBound(config.IsOffsetOriginallyEmptyFlags) Then
+                                            If Not config.IsOffsetOriginallyEmptyFlags(masterIdx) Then
+                                                If LogExtractor_IsArrayInitialized(config.OffsetDefinitions) And masterIdx <= UBound(config.OffsetDefinitions) And masterIdx >= LBound(config.OffsetDefinitions) Then
+                                                    currentDataValue = GetValueFromOffset(wsKoutei, currentBaseRowForProcess, currentBaseColForProcess, config.OffsetDefinitions(masterIdx), currentOutputHeader, config, mainWorkbook)
+                                                End If
+                                            End If
                                         End If
                                         foundMasterOffset = True
                                         Exit For
                                     End If
                                 Next masterIdx
                             End If
-                            If Not foundMasterOffset And config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: Header '" & currentOutputHeader & "' not found in master offset names or fixed fields for ProcessIdx " & processIdx
+                            If Not foundMasterOffset And config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - Header '" & currentOutputHeader & "' not found in OffsetItemMasterNames or fixed fields for ProcessIdx " & processIdx & ", Day " & Format(dateInLoop, "dd")
                         End If
                         oneRowOfExtractedData(outputColIdx) = currentDataValue
                     Next outputColIdx
 
-                    ' Blank Row Check (Revised based on O241: config.ExtractIfWorkersEmpty)
                     hasKeyDataOtherThanWorkers = False
-                    keyHeaderNamesForBlankCheck = Array("工番", "変電所", "作業名1", "作業名2", "担当の名前", "工事種類", "人数") ' Assumed header names for key data
+                    keyHeaderNamesForBlankCheck = Array("工番", "変電所", "作業名1", "作業名2", "担当の名前", "工事種類", "人数")
 
                     If LogExtractor_IsArrayInitialized(outputActualHeaderNames) And LogExtractor_IsArrayInitialized(oneRowOfExtractedData) Then
-                        For outputColIdx = LBound(oneRowOfExtractedData) To UBound(oneRowOfExtractedData)
+                        For outputColIdx = LBound(outputActualHeaderNames) To UBound(outputActualHeaderNames) ' Assumes 0-based
                             currentOutputHeader = outputActualHeaderNames(outputColIdx)
                             Dim isKeyToCheck As Boolean: isKeyToCheck = False
                             For Each keyHeaderName In keyHeaderNamesForBlankCheck
@@ -447,7 +427,7 @@ Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tC
                             If isKeyToCheck Then
                                 If Len(CStr(oneRowOfExtractedData(outputColIdx))) > 0 Then
                                     hasKeyDataOtherThanWorkers = True
-                                    Exit For ' Found key data, no need to check further for this purpose
+                                    Exit For
                                 End If
                             End If
                         Next outputColIdx
@@ -460,18 +440,16 @@ Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tC
                     End If
 
                     If isRowAllEmpty Then
-                        If Not filterLogSht Is Nothing Then Call M04_LogWriter.WriteFilterLogEntry(filterLogSht, GetNextFilterLogRow(filterLogSht), "空白行スキップ(O241:" & config.ExtractIfWorkersEmpty & ")", kouteiFilePath & "/" & actualTargetSheetName & "/Day" & Format(dateInLoop, "dd") & "/Proc" & processIdx)
+                        Call M04_LogWriter.WriteFilterLogEntry(config.LogSheetName, GetNextFilterLogRow(config.LogSheetName, mainWorkbook), "空白行スキップ(O241:" & config.ExtractIfWorkersEmpty & ")", kouteiFilePath & "/" & actualTargetSheetName & "/Day" & Format(dateInLoop, "dd") & "/Proc" & processIdx)
                         GoTo NextProcessInDay_M06
                     End If
 
-                    ' Filter (Stub)
                     If Not PerformFilterCheck(oneRowOfExtractedData, config) Then GoTo NextProcessInDay_M06
 
-                    ' Write to wsOutput
                     If Not wsOutput Is Nothing Then
-                        For colIdx = LBound(oneRowOfExtractedData) To UBound(oneRowOfExtractedData)
-                            wsOutput.Cells(outputNextRow, colIdx + LBound(outputActualHeaderNames)).Value = oneRowOfExtractedData(colIdx)
-                        Next colIdx
+                        For outputColIdx = LBound(oneRowOfExtractedData) To UBound(oneRowOfExtractedData) ' Assumes 0-based
+                            wsOutput.Cells(outputNextRow, outputColIdx + 1).Value = oneRowOfExtractedData(outputColIdx) ' Write to 1-based Excel columns
+                        Next outputColIdx
                         outputNextRow = outputNextRow + 1
                         totalExtractedCount = totalExtractedCount + 1
                         anyDateExtractedSuccessfullyInFile = True
@@ -480,21 +458,18 @@ Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tC
                         anyDateExtractedSuccessfullyInFile = True
                     End If
 
-                    ' Log successful full row extraction to filter log
-                    If Not filterLogSht Is Nothing Then
-                        tempStr = kouteiFilePath & "/" & actualTargetSheetName & "/" & Format(dateInLoop, "yyyy-mm-dd") & "/Proc" & processIdx
-                        Call M04_LogWriter.WriteFilterLogEntry(filterLogSht, GetNextFilterLogRow(filterLogSht), "行抽出成功", tempStr)
-                        If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - Successfully extracted row for Date: " & Format(dateInLoop, "yyyy-mm-dd") & ", Process: " & processIdx
-                    End If
+                    tempStr = kouteiFilePath & "/" & actualTargetSheetName & "/" & Format(dateInLoop, "yyyy-mm-dd") & "/Proc" & processIdx
+                    Call M04_LogWriter.WriteFilterLogEntry(config.LogSheetName, GetNextFilterLogRow(config.LogSheetName, mainWorkbook), "行抽出成功", tempStr)
+                    If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - Successfully extracted row for Date: " & Format(dateInLoop, "yyyy-mm-dd") & ", Process: " & processIdx
 
-        NextProcessInDay_M06: ' Label for skipping to next process
+        NextProcessInDay_M06:
                 Next processIdx
 NextDayInLoop_M06:
             Next dayIdx
 NextSheetInLoop_M06:
         Next eachSheetName
 
-        If Not targetSheetProcessed And UBound(config.TargetSheetNames) >= LBound(config.TargetSheetNames) Then ' Loop ran but all sheet names were empty
+        If Not targetSheetProcessed And UBound(config.TargetSheetNames) >= LBound(config.TargetSheetNames) Then
              Call M04_LogWriter.SafeWriteErrorLog("WARNING", mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", "処理対象シート名リスト(config.TargetSheetNames)に有効なシート名がありませんでした。", 0, kouteiFilePath)
              GoTo ExtractDataFromFile_Finally
         End If
@@ -503,24 +478,24 @@ NextSheetInLoop_M06:
         GoTo ExtractDataFromFile_Finally
     End If
 
-    If Not yearMonthEstablishedForThisFile And targetSheetProcessed Then ' Check if Y/M was never established despite processing sheets
+    If Not yearMonthEstablishedForThisFile And targetSheetProcessed Then
         tempStr = "ファイル「" & kouteiFilePath & "」内のどの指定シートからも有効な年/月を取得できませんでした。"
         Call M04_LogWriter.SafeWriteErrorLog("ERROR", mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile (YearMonthEstablishment)", tempStr, 0, "ファイル処理エラー")
-        anyDateExtractedSuccessfullyInFile = False ' Ensure this is False
+        anyDateExtractedSuccessfullyInFile = False
     End If
-    ExtractDataFromFile = anyDateExtractedSuccessfullyInFile ' Assign final determined value
+    ExtractDataFromFile = anyDateExtractedSuccessfullyInFile
 
 ExtractDataFromFile_Finally:
     If Not wbKoutei Is Nothing Then wbKoutei.Close SaveChanges:=False
     Set wsKoutei = Nothing
     Set wbKoutei = Nothing
-    Set filterLogSht = Nothing
+    ' Set filterLogSht = Nothing ' Removed as filterLogSht is removed
     If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M06_DataExtractor.ExtractDataFromFile - Closed file: '" & kouteiFilePath & "', Result: " & ExtractDataFromFile
     Exit Function
 
 ExtractDataFromFile_Error:
     tempStr = "実行時エラー " & Err.Number & ": " & Err.Description & ", Procedure: ExtractDataFromFile, File: " & kouteiFilePath
     Call M04_LogWriter.SafeWriteErrorLog("ERROR", mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", tempStr, Err.Number, Err.Description)
-    ExtractDataFromFile = False ' Ensure False on error
+    ExtractDataFromFile = False
     Resume ExtractDataFromFile_Finally
 End Function

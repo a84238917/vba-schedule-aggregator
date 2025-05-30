@@ -397,6 +397,27 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
     End If
     ' Now TraceDebugEnabled is set in configStruct and can be used by subsequent DEBUG_DETAIL prints in this Sub
 
+    ' A-EnableSheetLogging: 汎用ログシートへの出力有効フラグ (O5)
+    tempVal = GetCellValue(wsConfig, "O5", "LoadConfiguration (A-EnableSheetLogging)", m_errorOccurred, "汎用ログシート出力有効フラグ (O5)", targetWorkbook, configStruct.ErrorLogSheetName, False, "Boolean")
+    If Not m_errorOccurred Then
+        If Not IsEmpty(tempVal) Then
+            configStruct.EnableSheetLogging = tempVal
+        Else
+            configStruct.EnableSheetLogging = False ' Default value
+            If DEBUG_MODE_WARNING Then Call ReportConfigError(m_errorOccurred, "LoadConfiguration (A-EnableSheetLogging)", "O5", "汎用ログシート出力有効フラグ(O5)が不正または空のためFalseを適用", targetWorkbook, configStruct.ErrorLogSheetName, False, "WARNING_CONFIG_DEFAULT")
+        End If
+    ElseIf IsEmpty(configStruct.EnableSheetLogging) Then ' If GetCellValue had a more serious error and didn't set it
+        configStruct.EnableSheetLogging = False ' Ensure default
+    End If
+
+    ' A-LogSheetName: 汎用ログシート名 (O42)
+    configStruct.LogSheetName = GetCellValue(wsConfig, "O42", "LoadConfiguration (A-LogSheetName)", m_errorOccurred, "汎用ログシート名 (O42)", targetWorkbook, configStruct.ErrorLogSheetName, False, "String")
+    ' If sheet logging is enabled but no log sheet name is provided, log a warning.
+    If Not m_errorOccurred And configStruct.EnableSheetLogging And Len(configStruct.LogSheetName) = 0 Then
+        Call ReportConfigError(m_errorOccurred, "LoadConfiguration (A-LogSheetNameCheck)", "O42", "汎用ログシート出力が有効(O5=TRUE)ですが、ログシート名(O42)が未指定です。シートログは出力されません。", targetWorkbook, configStruct.ErrorLogSheetName, False, "WARNING_CONFIG_LOGGING_DISABLED")
+        ' configStruct.EnableSheetLogging = False ' Optionally force it False here
+    End If
+
     ' A-2: デフォルトフォルダパス (O12)
     configStruct.DefaultFolderPath = GetCellValue(wsConfig, "O12", "LoadConfiguration (A-2)", m_errorOccurred, "デフォルトフォルダパス", targetWorkbook, configStruct.ErrorLogSheetName, False, "String")
 
@@ -652,6 +673,8 @@ FinalConfigCheck: ' Label for GoTo statements if errors occur in C or E
         ' A. 全般設定
         Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   A-1. DebugModeFlag (O3): " & configStruct.DebugModeFlag
         Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   A-Trace. TraceDebugEnabled (O4): " & configStruct.TraceDebugEnabled
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   A-EnableSheetLogging (O5): " & configStruct.EnableSheetLogging
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   A-LogSheetName (O42): '" & configStruct.LogSheetName & "'"
         Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   A-2. DefaultFolderPath (O12): '" & configStruct.DefaultFolderPath & "'"
         Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   A-3. OutputSheetName (O43): '" & configStruct.OutputSheetName & "'"
         Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   A-4. SearchConditionLogSheetName (O44): '" & configStruct.SearchConditionLogSheetName & "'"

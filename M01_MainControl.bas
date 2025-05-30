@@ -22,6 +22,7 @@ Public Sub ExtractDataMain()
     Application.ScreenUpdating = False
     startTime = Timer
     Set wbThis = ThisWorkbook
+    Set g_configSettings.MainWorkbookObject = wbThis ' マクロ本体のWorkbookオブジェクトをグローバル設定に格納
 
     ' Initialize the global settings structure first. This ensures it's clean.
     Call InitializeConfigStructure(g_configSettings)

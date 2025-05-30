@@ -113,19 +113,63 @@ Private Function EnsureSheetExists(targetWorkbook As Workbook, sheetNameToEnsure
                     Call M04_LogWriter.SafeWriteErrorLog("WARNING", targetWorkbook, config.ErrorLogSheetName, "M03_SheetManager", "EnsureSheetExists", "出力シート「" & sheetNameToEnsure & "」のヘッダー情報 (OutputHeaderRowCount/OutputHeaderContents) がConfigに正しく設定されていません。ヘッダーは作成されません。", 0, "")
                     ' Allow sheet to be created empty, do not Exit Function here if ws was newly created.
                 Else
-                    ' Existing header writing loop
-                    For r = 1 To config.OutputHeaderRowCount
-                        If r <= UBound(config.OutputHeaderContents) And r >= LBound(config.OutputHeaderContents) Then
-                            If Len(config.OutputHeaderContents(r)) > 0 Then
-                                headerParts = Split(config.OutputHeaderContents(r), vbTab)
-                                For c = 0 To UBound(headerParts)
-                                    ws.Cells(r, c + 1).Value = headerParts(c)
-                                Next c
-                            Else ' Empty string in OutputHeaderContents(r) - write single empty cell to make row used
-                                ws.Cells(r, 1).Value = ""
-                            End If
+                    ' New header writing logic based on OutputHeaderRowCount
+                    If config.OutputHeaderRowCount = 1 Then
+                        If LBound(config.OutputHeaderContents) <= 1 And UBound(config.OutputHeaderContents) >= 1 Then ' Check array bounds
+                            headerParts = Split(config.OutputHeaderContents(1), vbTab)
+                            For c = 0 To UBound(headerParts)
+                                ws.Cells(1, c + 1).Value = headerParts(c)
+                            Next c
+                        Else
+                             Call M04_LogWriter.SafeWriteErrorLog("WARNING", targetWorkbook, config.ErrorLogSheetName, "M03_SheetManager", "EnsureSheetExists", "OutputHeaderContents(1) が存在しません。ヘッダー行1は作成されません。", 0, "")
                         End If
-                    Next r
+                    ElseIf config.OutputHeaderRowCount = 2 Then
+                        Dim headerPartsForRow2() As String
+                        Dim numCols As Long
+
+                        ' Row 1 (Merged Title)
+                        If LBound(config.OutputHeaderContents) <= 1 And UBound(config.OutputHeaderContents) >= 1 Then
+                            ws.Cells(1, 1).Value = config.OutputHeaderContents(1)
+                        Else
+                            Call M04_LogWriter.SafeWriteErrorLog("WARNING", targetWorkbook, config.ErrorLogSheetName, "M03_SheetManager", "EnsureSheetExists", "OutputHeaderContents(1) が存在しません。ヘッダー行1は作成されません。", 0, "")
+                        End If
+
+                        ' Row 2 (Column Names) - determine numCols from this row
+                        If LBound(config.OutputHeaderContents) <= 2 And UBound(config.OutputHeaderContents) >= 2 And Len(config.OutputHeaderContents(2)) > 0 Then
+                            headerPartsForRow2 = Split(config.OutputHeaderContents(2), vbTab)
+                            numCols = UBound(headerPartsForRow2) + 1
+                            For c = 0 To UBound(headerPartsForRow2)
+                                ws.Cells(2, c + 1).Value = headerPartsForRow2(c)
+                            Next c
+
+                            ' Merge Row 1 based on numCols from Row 2
+                            If numCols > 1 And Len(config.OutputHeaderContents(1)) > 0 Then ' Only merge if there's content in row 1
+                                On Error Resume Next ' Ignore error if already merged or invalid range
+                                ws.Range(ws.Cells(1, 1), ws.Cells(1, numCols)).Merge
+                                ws.Range(ws.Cells(1, 1), ws.Cells(1, numCols)).HorizontalAlignment = xlCenter
+                                On Error GoTo 0
+                            End If
+                        Else
+                            Call M04_LogWriter.SafeWriteErrorLog("WARNING", targetWorkbook, config.ErrorLogSheetName, "M03_SheetManager", "EnsureSheetExists", "OutputHeaderContents(2) が存在しないか空です。ヘッダー行2は作成されません。", 0, "")
+                            ' If row 1 had content but row 2 doesn't, it will just be a single cell title.
+                        End If
+
+                    Else ' OutputHeaderRowCount > 2 or other cases (e.g. 0, though caught by outer If)
+                        Call M04_LogWriter.SafeWriteErrorLog("WARNING", targetWorkbook, config.ErrorLogSheetName, "M03_SheetManager", "EnsureSheetExists", "ヘッダー行数が" & config.OutputHeaderRowCount & "行です。2行を超えるヘッダー行の特殊なフォーマット（例: 1行目マージ）は現在サポートされていません。各行をタブ区切りで出力します。", 0, "")
+                        If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M03_SheetManager.EnsureSheetExists - Writing " & config.OutputHeaderRowCount & " generic header rows for " & sheetNameToEnsure
+                        For r = 1 To config.OutputHeaderRowCount
+                            If r <= UBound(config.OutputHeaderContents) And r >= LBound(config.OutputHeaderContents) Then
+                                If Len(config.OutputHeaderContents(r)) > 0 Then
+                                    headerParts = Split(config.OutputHeaderContents(r), vbTab)
+                                    For c = 0 To UBound(headerParts)
+                                        ws.Cells(r, c + 1).Value = headerParts(c)
+                                    Next c
+                                Else
+                                    ws.Cells(r, 1).Value = "" ' Ensure row is "used"
+                                End If
+                            End If
+                        Next r
+                    End If
                 End If
             End If
         End If

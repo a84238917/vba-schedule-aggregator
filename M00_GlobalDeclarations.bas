@@ -31,6 +31,8 @@ Public Type tConfigSettings
     ' A. General Settings
     DebugModeFlag As Boolean              ' O3 デバッグモードフラグ
     TraceDebugEnabled As Boolean          ' O4 詳細トレースデバッグ有効フラグ (旧DEBUG_MODE_DETAIL)
+    EnableSheetLogging As Boolean   ' O5 汎用ログシートへの出力有効フラグ
+    LogSheetName As String          ' O42 汎用ログシート名
     DefaultFolderPath As String           ' O12 デフォルトフォルダパス
     OutputSheetName As String             ' O43 抽出結果出力シート名
     SearchConditionLogSheetName As String ' O44 検索条件ログシート名
@@ -102,6 +104,7 @@ Public Type tConfigSettings
     ScriptFullName As String        ' マクロファイルのフルパス
     WorkSheetName As String         ' Workシート名 (固定値または設定による)
     ConfigSheetFullName As String   ' Configシートのフルネーム (Workbook名を含む)
+    MainWorkbookObject As Workbook  ' マクロ本体のWorkbookオブジェクト参照 (M01で設定)
 End Type
 
 ' Global Variables
