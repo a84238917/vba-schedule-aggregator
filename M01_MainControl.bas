@@ -180,9 +180,9 @@ Private Sub InitializeConfigStructure(ByRef configStruct As tConfigSettings)
     Erase configStruct.SagyouKashoFilterList
     Erase configStruct.TargetFileFolderPaths
     Erase configStruct.FilePatternIdentifiers
-    Erase configStruct.OffsetItemNames
-    Erase configStruct.OffsetValuesRaw
-    Erase configStruct.Offsets
+    ' Erase configStruct.OffsetItemNames ' Obsolete - specific members used directly
+    ' Erase configStruct.OffsetValuesRaw ' Obsolete - specific members used directly
+    ' Erase configStruct.Offsets ' Obsolete - specific members used directly
     Erase configStruct.OutputHeaderContents
     Erase configStruct.HideSheetNames
 
