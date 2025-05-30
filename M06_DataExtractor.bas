@@ -40,11 +40,12 @@ Private Function PerformFilterCheck(dataRowArray As Variant, ByRef config As tCo
     PerformFilterCheck = True ' Placeholder, always passes filter
 End Function
 
-Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tConfigSettings, Optional wsOutput As Worksheet = Nothing, Optional ByRef outputNextRow As Long = 0, Optional ByVal currentFileNum As Long = 0, Optional ByRef totalExtractedCount As Long = 0) As Boolean
+Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tConfigSettings, ByVal mainWorkbook As Workbook, Optional wsOutput As Worksheet = Nothing, Optional ByRef outputNextRow As Long = 0, Optional ByVal currentFileNum As Long = 0, Optional ByRef totalExtractedCount As Long = 0) As Boolean
     ' 個別工程表ファイルからデータを抽出し、フィルターログに年月日の基本情報を記録します。
     ' Arguments:
     '   kouteiFilePath: (I) String型。処理対象の工程表ファイルパス。
     '   config: (I) tConfigSettings型。各種設定情報。
+    '   mainWorkbook: (I) Workbook型。マクロ本体（ログシートが存在する）のワークブックオブジェクト。
     '   wsOutput: (I/O) Worksheet型 (Optional)。抽出データの出力先シート。
     '   outputNextRow: (I/O) Long型 (Optional)。出力シートの次の書き込み行。
     '   currentFileNum: (I) Long型 (Optional)。現在処理中のファイル番号 (ログ用)。
@@ -61,7 +62,7 @@ Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tC
     ExtractDataFromFile = False ' Default to failure
     On Error GoTo ExtractDataFromFile_Error
 
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M06_DataExtractor.ExtractDataFromFile - Opening file: '" & kouteiFilePath & "'"
+    If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M06_DataExtractor.ExtractDataFromFile - Opening file: '" & kouteiFilePath & "'"
     Set wbKoutei = Workbooks.Open(Filename:=kouteiFilePath, UpdateLinks:=0, ReadOnly:=True)
     If wbKoutei Is Nothing Then Exit Function ' Should be caught by error handler, but as a safeguard
 
@@ -70,21 +71,21 @@ Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tC
         If UBound(config.TargetSheetNames) >= LBound(config.TargetSheetNames) Then
             targetSheetName = config.TargetSheetNames(LBound(config.TargetSheetNames))
         Else
-            Call M04_LogWriter.SafeWriteErrorLog(ActiveWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", "処理対象シート名リスト(config.TargetSheetNames)が空です。", 0, kouteiFilePath)
+            Call M04_LogWriter.SafeWriteErrorLog(mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", "処理対象シート名リスト(config.TargetSheetNames)が空です。", 0, kouteiFilePath)
             GoTo ExtractDataFromFile_Finally ' Graceful exit
         End If
     Else
-        Call M04_LogWriter.SafeWriteErrorLog(ActiveWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", "処理対象シート名リスト(config.TargetSheetNames)が初期化されていません。", 0, kouteiFilePath)
+        Call M04_LogWriter.SafeWriteErrorLog(mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", "処理対象シート名リスト(config.TargetSheetNames)が初期化されていません。", 0, kouteiFilePath)
         GoTo ExtractDataFromFile_Finally
     End If
 
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M06_DataExtractor.ExtractDataFromFile - Attempting to access sheet: '" & targetSheetName & "' in file '" & kouteiFilePath & "'"
+    If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M06_DataExtractor.ExtractDataFromFile - Attempting to access sheet: '" & targetSheetName & "' in file '" & kouteiFilePath & "'"
     On Error Resume Next ' Temporarily disable error handling for sheet existence check
     Set wsKoutei = wbKoutei.Worksheets(targetSheetName)
     On Error GoTo ExtractDataFromFile_Error ' Restore main error handler
     
     If wsKoutei Is Nothing Then
-        Call M04_LogWriter.SafeWriteErrorLog(ActiveWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", "シートが見つかりません: " & targetSheetName, 0, kouteiFilePath)
+        Call M04_LogWriter.SafeWriteErrorLog(mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", "シートが見つかりません: " & targetSheetName, 0, kouteiFilePath)
         GoTo ExtractDataFromFile_Finally
     End If
 
@@ -95,16 +96,16 @@ Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tC
     
     If Not IsNumeric(yearVal) Or Not IsNumeric(monthVal) Or CLng(yearVal) < 1900 Or CLng(yearVal) > 2999 Or CLng(monthVal) < 1 Or CLng(monthVal) > 12 Then
         tempStr = "年セル(" & config.YearCellAddress & ")または月セル(" & config.MonthCellAddress & ")の値が不正です。Year='" & CStr(yearVal) & "', Month='" & CStr(monthVal) & "'"
-        Call M04_LogWriter.SafeWriteErrorLog(ActiveWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", tempStr, 0, kouteiFilePath & "/" & targetSheetName)
+        Call M04_LogWriter.SafeWriteErrorLog(mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", tempStr, 0, kouteiFilePath & "/" & targetSheetName)
         GoTo ExtractDataFromFile_Finally
     End If
     currentYear = CLng(yearVal)
     currentMonth = CLng(monthVal)
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M06_DataExtractor.ExtractDataFromFile - Year: " & currentYear & ", Month: " & currentMonth
+    If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M06_DataExtractor.ExtractDataFromFile - Year: " & currentYear & ", Month: " & currentMonth
 
     ' --- フィルターログシート取得 ---
     On Error Resume Next ' Temporarily disable error handling for sheet existence check
-    Set filterLogSht = ActiveWorkbook.Worksheets(config.SearchConditionLogSheetName)
+    Set filterLogSht = mainWorkbook.Worksheets(config.SearchConditionLogSheetName)
     On Error GoTo ExtractDataFromFile_Error ' Restore main error handler
     
     If filterLogSht Is Nothing Then
@@ -139,7 +140,7 @@ Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tC
         If Not filterLogSht Is Nothing Then
             tempStr = kouteiFilePath & "/" & targetSheetName & "/" & Format(dateInLoop, "yyyy-mm-dd")
             Call M04_LogWriter.WriteFilterLogEntry(filterLogSht, GetNextFilterLogRow(filterLogSht), "日付抽出成功", tempStr)
-            If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M06_DataExtractor.ExtractDataFromFile - Extracted Date: " & Format(dateInLoop, "yyyy-mm-dd")
+            If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M06_DataExtractor.ExtractDataFromFile - Extracted Date: " & Format(dateInLoop, "yyyy-mm-dd")
         End If
         ' このステップでは工程処理ループと詳細データ項目抽出は行わない
 NextDayInLoop_M06:
@@ -151,12 +152,12 @@ ExtractDataFromFile_Finally:
     Set wsKoutei = Nothing
     Set wbKoutei = Nothing
     Set filterLogSht = Nothing
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M06_DataExtractor.ExtractDataFromFile - Closed file: '" & kouteiFilePath & "', Result: " & ExtractDataFromFile
+    If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M06_DataExtractor.ExtractDataFromFile - Closed file: '" & kouteiFilePath & "', Result: " & ExtractDataFromFile
     Exit Function
 
 ExtractDataFromFile_Error:
     tempStr = "実行時エラー " & Err.Number & ": " & Err.Description & ", Procedure: ExtractDataFromFile, File: " & kouteiFilePath
-    Call M04_LogWriter.SafeWriteErrorLog(ActiveWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", tempStr, Err.Number, Err.Description)
+    Call M04_LogWriter.SafeWriteErrorLog(mainWorkbook, config.ErrorLogSheetName, "M06_DataExtractor", "ExtractDataFromFile", tempStr, Err.Number, Err.Description)
     ExtractDataFromFile = False ' Ensure False on error
     Resume ExtractDataFromFile_Finally
 End Function

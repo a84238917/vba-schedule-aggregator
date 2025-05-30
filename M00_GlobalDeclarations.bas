@@ -4,7 +4,6 @@ Option Explicit
 ' Global Debug Flag Constants
 Public Const DEBUG_MODE_ERROR As Boolean = True    ' エラー関連の詳細デバッグ情報を出力するかどうか
 Public Const DEBUG_MODE_WARNING As Boolean = False ' 警告レベルのデバッグ情報を出力するかどうか
-Public Const DEBUG_MODE_DETAIL As Boolean = False  ' 詳細な処理追跡情報を出力するかどうか
 
 ' Fixed Setting Value Constant
 Public Const CONFIG_SHEET_DEFAULT_NAME As String = "Config (2)" ' 設定シートのデフォルト名
@@ -25,6 +24,7 @@ End Type
 Public Type tConfigSettings
     ' A. General Settings
     DebugModeFlag As Boolean              ' O3 デバッグモードフラグ
+    TraceDebugEnabled As Boolean       ' O4 詳細デバッグ出力フラグ
     DefaultFolderPath As String           ' O12 デフォルトフォルダパス
     OutputSheetName As String             ' O43 抽出結果出力シート名
     SearchConditionLogSheetName As String ' O44 検索条件ログシート名

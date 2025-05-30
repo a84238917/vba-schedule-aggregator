@@ -63,7 +63,7 @@ Public Sub ExtractDataMain()
     Call M04_LogWriter.WriteFilterLog(g_configSettings, wbThis)
 
     ' --- 3. 処理対象ファイル特定フェーズ & 6. メインループフェーズ ---
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M01_MainControl.ExtractDataMain - Starting file processing phase."
+    If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M01_MainControl.ExtractDataMain - Starting file processing phase."
 
     If M05_FileProcessor.GetTargetFiles(g_configSettings, targetFiles) Then
         If targetFiles.Count > 0 Then
@@ -74,8 +74,8 @@ Public Sub ExtractDataMain()
                 
                 ' M06_DataExtractor.ExtractDataFromFile呼び出し
                 ' Optional引数 wsOutput, outputNextRow, currentFileNum, totalExtractedCount を渡す
-                If M06_DataExtractor.ExtractDataFromFile(CStr(procFile), g_configSettings, wsResultOutput, nextOutputRow, fileIdx, extractedTotal) Then
-                    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M01_MainControl.ExtractDataMain - Successfully processed (ExtractDataFromFile returned True) for: '" & CStr(procFile) & "'"
+                If M06_DataExtractor.ExtractDataFromFile(CStr(procFile), g_configSettings, wbThis, wsResultOutput, nextOutputRow, fileIdx, extractedTotal) Then
+                    If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M01_MainControl.ExtractDataMain - Successfully processed (ExtractDataFromFile returned True) for: '" & CStr(procFile) & "'"
                 Else
                     If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M01_MainControl.ExtractDataMain - Failed to process (ExtractDataFromFile returned False) for: '" & CStr(procFile) & "'"
                     ' エラーはM06内でSafeWriteErrorLogを使って記録されているはずなので、ここでは詳細なエラーログは不要
@@ -135,7 +135,7 @@ End Sub
 ' Helper Procedure: InitializeConfigStructure
 Private Sub InitializeConfigStructure(ByRef configStruct As tConfigSettings)
     ' 引数で受け取ったtConfigSettings型の構造体の全メンバー（特に動的配列）を初期化（Erase）します。
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M01_MainControl.InitializeConfigStructure - 初期化開始"
+    If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M01_MainControl.InitializeConfigStructure - 初期化開始"
 
     Erase configStruct.TargetSheetNames
     Erase configStruct.ProcessKeys
@@ -164,7 +164,7 @@ Private Sub InitializeConfigStructure(ByRef configStruct As tConfigSettings)
     Erase configStruct.OutputHeaderContents
     Erase configStruct.HideSheetNames
 
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M01_MainControl.InitializeConfigStructure - 初期化完了"
+    If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M01_MainControl.InitializeConfigStructure - 初期化完了"
 End Sub
 
 ' Helper Function: LogMain_IsArrayInitialized

@@ -65,7 +65,7 @@ Public Function GetTargetFiles(ByRef config As tConfigSettings, ByRef targetFile
             If IsExcelFile(filePathFromConfig) Then
                 targetFilesCollection.Add filePathFromConfig
                 successFlag = True
-                If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M05_FileProcessor.GetTargetFiles - Added target file: '" & filePathFromConfig & "'"
+                If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M05_FileProcessor.GetTargetFiles - Added target file: '" & filePathFromConfig & "'"
             Else
                 Call M04_LogWriter.SafeWriteErrorLog(ActiveWorkbook, config.ErrorLogSheetName, "M05_FileProcessor", "GetTargetFiles", "指定されたファイルはExcelファイルではありません: " & filePathFromConfig, 0, "")
             End If

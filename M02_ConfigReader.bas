@@ -123,7 +123,7 @@ Private Sub LoadStringList(ByRef targetStringArray() As String, sourceSheet As W
     Dim arrIndex As Long
 
     Set tempCollection = New Collection
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadStringList - Loading " & listDescription & " from " & columnLetter & firstRow & ":" & columnLetter & lastRow
+    If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadStringList - Loading " & listDescription & " from " & columnLetter & firstRow & ":" & columnLetter & lastRow
 
     For i = firstRow To lastRow
         cellValue = sourceSheet.Cells(i, columnLetter).Value
@@ -143,7 +143,7 @@ Private Sub LoadStringList(ByRef targetStringArray() As String, sourceSheet As W
             Call ReportConfigError(overallErrorFlag, callerProcName, columnLetter & firstRow & "-" & lastRow, listDescription & " は必須項目ですが、リストが空です。", targetWorkbookForLog, errorLogSheetForLog)
         End If
     End If
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadStringList - " & listDescription & " loaded with " & tempCollection.Count & " items."
+    If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadStringList - " & listDescription & " loaded with " & tempCollection.Count & " items."
 End Sub
 
 Private Sub ReportConfigError(ByRef overallErrorFlag As Boolean, errorSourceContext As String, errorSourceCell As String, errorMessageText As String, _
@@ -211,7 +211,7 @@ Private Sub LoadProcessDetailsLimited(ByRef configS As tConfigSettings, srcSheet
 
     If configS.ProcessesPerDay <= 0 Then Exit Sub ' Should not happen if validation in LoadConfiguration is correct
 
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadProcessDetailsLimited - Reading J, K" & IIf(configS.DebugModeFlag, ", L, M, N", "") & " cols from row 129 for " & configS.ProcessesPerDay & " processes."
+    If configS.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadProcessDetailsLimited - Reading J, K" & IIf(configS.DebugModeFlag, ", L, M, N", "") & " cols from row 129 for " & configS.ProcessesPerDay & " processes."
 
     For i = 0 To configS.ProcessesPerDay - 1
         ' Kankatsu1 (J column)
@@ -250,7 +250,7 @@ Private Sub LoadProcessPatternColNumbersLimited(ByRef configS As tConfigSettings
 
     If configS.ProcessesPerDay <= 0 Then Exit Sub
 
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadProcessPatternColNumbersLimited - Reading O col from row 129 for " & configS.ProcessesPerDay & " processes for pattern 1."
+    If configS.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadProcessPatternColNumbersLimited - Reading O col from row 129 for " & configS.ProcessesPerDay & " processes for pattern 1."
 
     For i = 0 To configS.ProcessesPerDay - 1
         colCountVal = GetCellValue(srcSheet, "O" & (129 + i), "LoadProcessPatternColNumbersLimited", errFlag, "工程列数 (O" & (129 + i) & ")", wbLog, errLogName, True, "Long", 0) ' isRequired=True, MinValue=0
@@ -311,7 +311,9 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
     On Error GoTo LoadConfiguration_Error_MainHandler
 
     ' --- Configシートオブジェクト取得 ---
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Attempting to get Config sheet: '" & configSheetName & "'"
+    ' Note: TraceDebugEnabled is not yet available from configStruct here, using g_configSettings as a fallback (though it's also not set yet)
+    ' This initial log might better use DEBUG_MODE_ERROR or be moved after TraceDebugEnabled is read. For now, using g_configSettings.
+    If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Attempting to get Config sheet: '" & configSheetName & "'"
     On Error Resume Next ' Temporarily change error handling
     Set wsConfig = targetWorkbook.Worksheets(configSheetName)
     On Error GoTo LoadConfiguration_Error_MainHandler ' Restore main error handler
@@ -323,10 +325,12 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
         Exit Function ' Returns False
     End If
     configStruct.ConfigSheetFullName = targetWorkbook.FullName & " | " & wsConfig.Name ' Use a clear separator
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Config sheet found: '" & configStruct.ConfigSheetFullName & "'"
+    ' TraceDebugEnabled not yet read, use g_configSettings for this specific log line.
+    If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Config sheet found: '" & configStruct.ConfigSheetFullName & "'"
 
     ' --- A. 全般設定 ---
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Reading Section A: General Settings"
+    ' TraceDebugEnabled not yet read for this section's title print.
+    If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Reading Section A: General Settings"
     
     ' A-1: デバッグモードフラグ (O3)
     tempVal = GetCellValue(wsConfig, "O3", "LoadConfiguration (A-1)", m_errorOccurred, "デバッグモードフラグ", targetWorkbook, configStruct.ErrorLogSheetName, False, "Boolean")
@@ -339,6 +343,18 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
         End If
     End If
     ' Note: m_errorOccurred could be true if GetCellValue had a fatal read error.
+
+    ' A-Trace: 詳細デバッグ出力フラグ (O4)
+    tempVal = GetCellValue(wsConfig, "O4", "LoadConfiguration (A-Trace)", m_errorOccurred, "詳細デバッグ出力フラグ (O4)", targetWorkbook, configStruct.ErrorLogSheetName, False, "Boolean")
+    If Not m_errorOccurred Then
+        If Not IsEmpty(tempVal) Then
+            configStruct.TraceDebugEnabled = tempVal
+        Else
+            configStruct.TraceDebugEnabled = False ' Default to False
+            If DEBUG_MODE_WARNING Then Call ReportConfigError(m_errorOccurred, "LoadConfiguration (A-Trace)", "O4", "詳細デバッグ出力フラグ(O4)が不正または未設定のためFalseを適用", targetWorkbook, configStruct.ErrorLogSheetName, False)
+        End If
+    End If
+    ' Now TraceDebugEnabled is set in configStruct and can be used by subsequent DEBUG_DETAIL prints in this Sub
 
     ' A-2: デフォルトフォルダパス (O12)
     configStruct.DefaultFolderPath = GetCellValue(wsConfig, "O12", "LoadConfiguration (A-2)", m_errorOccurred, "デフォルトフォルダパス", targetWorkbook, configStruct.ErrorLogSheetName, False, "String")
@@ -374,7 +390,7 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
     End If
 
     ' --- B. 工程表ファイル内 設定 ---
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Reading Section B: Schedule File Settings"
+    If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Reading Section B: Schedule File Settings"
     
     ' B-1: 工程表内 検索対象シート名リスト (O66-O75) - Required List
     Call LoadStringList(configStruct.TargetSheetNames, wsConfig, "O", 66, 75, "LoadConfiguration (B-1)", "検索対象シート名リスト", m_errorOccurred, targetWorkbook, configStruct.ErrorLogSheetName, True)
@@ -417,7 +433,7 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
     configStruct.ProcessesPerDay = GetCellValue(wsConfig, "O114", "LoadConfiguration (B-10)", m_errorOccurred, "1日の工程数", targetWorkbook, configStruct.ErrorLogSheetName, True, "Long", 1)
 
     ' --- C. 工程パターン定義 (ステップ4限定読み込み) ---
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Reading Section C (Limited for Step 4)"
+    If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Reading Section C (Limited for Step 4)"
     configStruct.CurrentPatternIdentifier = "1" ' 固定でパターン"1"を使用 (仕様変更: FileProcessPatternToUse -> CurrentPatternIdentifier)
 
     If configStruct.ProcessesPerDay > 0 Then ' 配列をReDimする前に要素数を確認
@@ -449,7 +465,7 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
     End If
 
     ' --- E. 処理対象ファイル定義 (ステップ4限定読み込み) ---
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Reading Section E (Limited for Step 4)"
+    If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Reading Section E (Limited for Step 4)"
     ReDim configStruct.TargetFileFolderPaths(0 To 0) As String ' Only one file for now
     
     Dim filePathP557Val As Variant
@@ -458,7 +474,7 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
     If Not m_errorOccurred Then ' Check if GetCellValue itself caused a fatal error
         If Not IsEmpty(filePathP557Val) And Len(CStr(filePathP557Val)) > 0 Then
             configStruct.TargetFileFolderPaths(0) = CStr(filePathP557Val)
-            If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - TargetFileFolderPaths(0) (P557): '" & configStruct.TargetFileFolderPaths(0) & "'"
+            If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - TargetFileFolderPaths(0) (P557): '" & configStruct.TargetFileFolderPaths(0) & "'"
         Else ' This specific case (IsEmpty or empty string for a required field) should be caught by GetCellValue
              ' However, if isRequiredField was accidentally False, this would be a fallback.
              ' For safety, ensure error is flagged if required field is empty.
@@ -480,6 +496,7 @@ FinalConfigCheck: ' Label for GoTo statements if errors occur in C or E
         Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG: --- Loaded Configuration Settings (M02_ConfigReader) ---"
         ' A. 全般設定
         Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   A-1. DebugModeFlag (O3): " & configStruct.DebugModeFlag
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   A-Trace. TraceDebugEnabled (O4): " & configStruct.TraceDebugEnabled
         Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   A-2. DefaultFolderPath (O12): '" & configStruct.DefaultFolderPath & "'"
         Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   A-3. OutputSheetName (O43): '" & configStruct.OutputSheetName & "'"
         Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   A-4. SearchConditionLogSheetName (O44): '" & configStruct.SearchConditionLogSheetName & "'"
@@ -511,7 +528,7 @@ FinalConfigCheck: ' Label for GoTo statements if errors occur in C or E
     End If
 
     LoadConfiguration = True
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Configuration loaded successfully."
+    If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Configuration loaded successfully."
     Exit Function
 
 LoadConfiguration_Error_MainHandler:

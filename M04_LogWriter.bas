@@ -19,7 +19,7 @@ Public Sub WriteErrorLog(moduleName As String, procedureName As String, relatedI
         Exit Sub
     End If
     
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M04_LogWriter.WriteErrorLog - Writing to: '" & g_errorLogWorksheet.Name & "'!A" & g_nextErrorLogRow & ", Module: " & moduleName & ", Procedure: " & procedureName
+    If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M04_LogWriter.WriteErrorLog - Writing to: '" & g_errorLogWorksheet.Name & "'!A" & g_nextErrorLogRow & ", Module: " & moduleName & ", Procedure: " & procedureName
 
     With g_errorLogWorksheet
         .Cells(g_nextErrorLogRow, 1).Value = Format(Now, "yyyy/mm/dd hh:nn:ss") ' A: 発生日時
@@ -113,7 +113,7 @@ Public Sub SafeWriteErrorLog(targetWorkbook As Workbook, errorLogSheetNameAttemp
         End If
     End If
 
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M04_LogWriter.SafeWriteErrorLog - Writing to: '" & ws.Name & "'!A" & nextRow & ", Module: " & moduleName & ", Procedure: " & procedureName
+    If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M04_LogWriter.SafeWriteErrorLog - Writing to: '" & ws.Name & "'!A" & nextRow & ", Module: " & moduleName & ", Procedure: " & procedureName
 
     With ws
         .Cells(nextRow, 1).Value = Format(Now, "yyyy/mm/dd hh:nn:ss")
@@ -172,7 +172,7 @@ Public Sub WriteFilterLog(ByRef config As tConfigSettings, ByVal targetWorkbook 
         nextLogWriteRow = 2 ' ヘッダー書いたのでデータは次から
     End If
     
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M04_LogWriter.WriteFilterLog - Attempting to write initial logs to: '" & wsLog.Name & "'!A" & nextLogWriteRow
+    If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M04_LogWriter.WriteFilterLog - Attempting to write initial logs to: '" & wsLog.Name & "'!A" & nextLogWriteRow
 
     Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "マクロ実行", "開始: " & Format(config.StartTime, "yyyy/mm/dd hh:nn:ss"))
     Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "実行ファイルパス", config.ScriptFullName)
@@ -183,7 +183,7 @@ Public Sub WriteFilterLog(ByRef config As tConfigSettings, ByVal targetWorkbook 
     ' 例: Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "作業員フィルターリスト", config.WorkerFilterList)
     ' ... 他のフィルター条件 ...
 
-    If DEBUG_MODE_DETAIL Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M04_LogWriter.WriteFilterLog - Filter log entries written up to row " & nextLogWriteRow -1
+    If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M04_LogWriter.WriteFilterLog - Filter log entries written up to row " & nextLogWriteRow -1
     Exit Sub
 
 WriteFilterLog_Error:
