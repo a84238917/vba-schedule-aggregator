@@ -86,34 +86,9 @@ Public Type tConfigSettings
     FilePatternIdentifiers() As String ' Q557-Q756 各処理対象ファイル適用工程パターン識別子
 
     ' F. Extraction Data Offset Definition
-    ' F.1. Specific Offset Members (11 items)
-    OffsetKouban As tOffset                 ' 工番オフセット
-    IsOffsetKoubanOriginallyEmpty As Boolean
-    OffsetHensendenjo As tOffset            ' 変電所オフセット
-    IsOffsetHensendenjoOriginallyEmpty As Boolean
-    OffsetSagyomei1 As tOffset              ' 作業名1オフセット
-    IsOffsetSagyomei1OriginallyEmpty As Boolean
-    OffsetSagyomei2 As tOffset              ' 作業名2オフセット
-    IsOffsetSagyomei2OriginallyEmpty As Boolean
-    OffsetTantou As tOffset                 ' 担当の名前オフセット
-    IsOffsetTantouOriginallyEmpty As Boolean
-    OffsetKoujiShurui As tOffset            ' 工事種類オフセット
-    IsOffsetKoujiShuruiOriginallyEmpty As Boolean
-    OffsetNinzu As tOffset                  ' 人数オフセット
-    IsOffsetNinzuOriginallyEmpty As Boolean
-    OffsetSagyoinStart As tOffset           ' 作業員開始オフセット (ここから複数名取得)
-    IsOffsetSagyoinStartOriginallyEmpty As Boolean
-    OffsetSonota As tOffset                 ' 旧その他オフセット
-    IsOffsetSonotaOriginallyEmpty As Boolean
-    OffsetShuuryoJikan As tOffset           ' 終了時間オフセット
-    IsOffsetShuuryoJikanOriginallyEmpty As Boolean
-    OffsetBunrui1ExtSrc As tOffset          ' 分類1抽出元オフセット
-    IsOffsetBunrui1ExtSrcOriginallyEmpty As Boolean
-    
-    ' F.2. Generic Offset arrays (no longer primary, but kept for potential future use or reference)
-    OffsetItemNames() As String             ' N778-N792 オフセット項目名リスト (Config読込時の一時利用)
-    OffsetValuesRaw() As String             ' O778-O792 オフセット値リスト (Raw "row,col" strings, Config読込時の一時利用)
-    ' Offsets() As tOffset                  ' F-2 オフセット値 (パース後) - これは廃止され、上記の個別メンバーに置き換えられました
+    OffsetItemMasterNames() As String      ' Config N列のオフセット項目名リスト(F-1)
+    OffsetDefinitions() As tOffset         ' Config O列のパースされたオフセット定義
+    IsOffsetOriginallyEmptyFlags() As Boolean ' Config O列が元々空だったかのフラグ
 
     ' G. Output Sheet Settings
     OutputHeaderRowCount As Long    ' O811 出力シートヘッダー行数

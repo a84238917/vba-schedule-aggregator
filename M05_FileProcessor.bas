@@ -24,7 +24,7 @@ Private Function IsExcelFile(ByVal fileName As String) As Boolean
         Exit Function
     End If
     ext = LCase(Right(fileName, Len(fileName) - InStrRev(fileName, ".")))
-    
+
     Select Case ext
         Case "xlsx", "xls", "xlsm"
             IsExcelFile = True
@@ -45,12 +45,12 @@ Public Function GetTargetFiles(ByRef config As tConfigSettings, ByVal mainAppWor
     Dim fso As Object
     Dim filePathFromConfig As String
     Dim successFlag As Boolean ' Local flag for clarity before setting function return
-    
+
     successFlag = False ' Default to failure
     On Error GoTo GetTargetFiles_Error
 
     Set fso = CreateObject("Scripting.FileSystemObject")
-    
+
     ' 設定構造体からファイルパスを取得 (ステップ4では config.TargetFileFolderPaths(0) にP557の値が入っている想定)
     If LogFileProcessor_IsArrayInitialized(config.TargetFileFolderPaths) Then
         If UBound(config.TargetFileFolderPaths) >= LBound(config.TargetFileFolderPaths) Then
@@ -77,7 +77,7 @@ Public Function GetTargetFiles(ByRef config As tConfigSettings, ByVal mainAppWor
     Else
         Call M04_LogWriter.SafeWriteErrorLog("WARNING", mainAppWorkbook, config.ErrorLogSheetName, "M05_FileProcessor", "GetTargetFiles", "ConfigシートP557に処理対象ファイルパスが指定されていません。", 0, "")
     End If
-    
+
     GetTargetFiles = successFlag
     Set fso = Nothing
     Exit Function

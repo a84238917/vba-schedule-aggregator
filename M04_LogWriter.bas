@@ -20,7 +20,7 @@ Public Sub WriteErrorLog(errorLevel As String, moduleName As String, procedureNa
         If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M04_LogWriter.WriteErrorLog - g_errorLogWorksheet is Nothing. Cannot write error log."
         Exit Sub
     End If
-    
+
     If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M04_LogWriter.WriteErrorLog - Writing to: '" & g_errorLogWorksheet.Name & "'!A" & g_nextErrorLogRow & ", Level: " & errorLevel & ", Module: " & moduleName
 
     With g_errorLogWorksheet
@@ -100,7 +100,7 @@ Public Sub SafeWriteErrorLog(errorLevel As String, targetWorkbook As Workbook, e
         End If
         If nextRow > ws.Rows.Count Then nextRow = ws.Rows.Count ' Safety for very full sheet
         If nextRow <= 0 Then nextRow = 1 ' Ensure nextRow is at least 1
-        
+
         ' If headers were expected and nextRow is 1, ensure headers are written.
         ' This part is maintained from previous logic, now applied after the new nextRow calculation.
         ' If nextRow becomes 1 for an existing sheet, it means the sheet was likely empty or headerless.
@@ -157,7 +157,7 @@ Public Sub WriteFilterLog(ByRef config As tConfigSettings, ByVal targetWorkbook 
     On Error Resume Next ' シート存在確認のエラーをハンドル
     Set wsLog = targetWorkbook.Sheets(config.SearchConditionLogSheetName)
     On Error GoTo WriteFilterLog_Error ' エラーハンドラを元に戻す
-    
+
     If wsLog Is Nothing Then
         If DEBUG_MODE_WARNING Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - WARNING: M04_LogWriter.WriteFilterLog - SearchConditionLogSheetName '" & config.SearchConditionLogSheetName & "' not found. Should be created by M03_SheetManager."
         Exit Sub ' Should be created by M03_SheetManager
@@ -177,7 +177,7 @@ Public Sub WriteFilterLog(ByRef config As tConfigSettings, ByVal targetWorkbook 
         wsLog.Cells(1, 3).Value = "値"
         nextLogWriteRow = 2 ' ヘッダー書いたのでデータは次から
     End If
-    
+
     If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M04_LogWriter.WriteFilterLog - Attempting to write initial logs to: '" & wsLog.Name & "'!A" & nextLogWriteRow
 
     Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "マクロ実行", "開始: " & Format(config.StartTime, "yyyy/mm/dd hh:nn:ss"))

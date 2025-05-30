@@ -22,7 +22,7 @@ Private Function GetHeaderRowCountForSheet(targetSheet As Worksheet, ByRef confi
     '   targetSheet: 対象のワークシート
     '   config: 設定情報
     '   mainWorkbook: ログ出力用のメインワークブック
-    
+
     If targetSheet Is Nothing Then
         GetHeaderRowCountForSheet = 0
         If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M03_SheetManager.GetHeaderRowCountForSheet - targetSheet is Nothing."
@@ -37,7 +37,7 @@ Private Function GetHeaderRowCountForSheet(targetSheet As Worksheet, ByRef confi
         GetHeaderRowCountForSheet = 0 ' Default to 0 rows if essential config is missing
         Exit Function
     End If
-    
+
     ' config.OutputHeaderRowCount is a Long and will be 0 if not set.
     ' M02_ConfigReader validates it to be within 0-10 (or 1-10 if headers are mandatory).
     ' If it's 0, it means no headers are configured, which is a valid state.
@@ -47,10 +47,10 @@ Private Function GetHeaderRowCountForSheet(targetSheet As Worksheet, ByRef confi
     Else
         GetHeaderRowCountForSheet = 0 ' Not the specifically configured output sheet
     End If
-    
+
     ' Ensure non-negative, though M02 should have validated this.
-    If GetHeaderRowCountForSheet < 0 Then GetHeaderRowCountForSheet = 0 
-    
+    If GetHeaderRowCountForSheet < 0 Then GetHeaderRowCountForSheet = 0
+
     If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M03_SheetManager.GetHeaderRowCountForSheet - Sheet: " & targetSheet.Name & ", Configured OutputSheetName: " & config.OutputSheetName & ", Returned HeaderRows: " & GetHeaderRowCountForSheet
 End Function
 
@@ -122,7 +122,7 @@ Private Function EnsureSheetExists(targetWorkbook As Workbook, sheetNameToEnsure
                                     ws.Cells(r, c + 1).Value = headerParts(c)
                                 Next c
                             Else ' Empty string in OutputHeaderContents(r) - write single empty cell to make row used
-                                ws.Cells(r, 1).Value = "" 
+                                ws.Cells(r, 1).Value = ""
                             End If
                         End If
                     Next r
@@ -226,7 +226,7 @@ Public Sub PrepareOutputSheet(ByRef config As tConfigSettings, ByVal mainWorkboo
 
     Dim wsOutput As Worksheet
     Dim headerActualRowCount As Long
-    
+
     On Error GoTo PrepareOutputSheet_Error
     outOutputStartRow = 1 ' Default if something fails
 
@@ -242,11 +242,11 @@ Public Sub PrepareOutputSheet(ByRef config As tConfigSettings, ByVal mainWorkboo
     On Error Resume Next
     Set wsOutput = mainWorkbook.Worksheets(config.OutputSheetName)
     On Error GoTo PrepareOutputSheet_Error
-    
+
     If wsOutput Is Nothing Then
         ' EnsureSheetExists (called by PrepareSheets) should have created it. If not, something is wrong.
         Call M04_LogWriter.SafeWriteErrorLog("ERROR", mainWorkbook, config.ErrorLogSheetName, "M03_SheetManager", "PrepareOutputSheet", "出力シート「" & config.OutputSheetName & "」が見つかりません。", 0, "")
-        Exit Sub 
+        Exit Sub
     End If
 
     headerActualRowCount = GetHeaderRowCountForSheet(wsOutput, config, mainWorkbook) ' Added mainWorkbook
@@ -260,7 +260,7 @@ Public Sub PrepareOutputSheet(ByRef config As tConfigSettings, ByVal mainWorkboo
             wsOutput.Rows(headerActualRowCount + 1 & ":" & wsOutput.Rows.Count).ClearContents
         End If
     End If
-    
+
     outOutputStartRow = headerActualRowCount + 1
     If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M03_SheetManager.PrepareOutputSheet - Output start row set to: " & outOutputStartRow
     Exit Sub

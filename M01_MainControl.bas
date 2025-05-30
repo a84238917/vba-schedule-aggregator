@@ -28,21 +28,21 @@ Public Sub ExtractDataMain()
     ' Set initial values that don't depend on the config sheet itself
     g_configSettings.StartTime = Now()
     g_configSettings.ScriptFullName = wbThis.FullName
-    
+
     ' --- 1. Configシート読み込みフェーズ ---
     If Not M02_ConfigReader.LoadConfiguration(g_configSettings, wbThis, CONFIG_SHEET_DEFAULT_NAME) Then
         Dim actualErrorLogSheetName As String
         errorLevelForLog = "CRITICAL" ' Define error level
-        
+
         On Error Resume Next ' Attempt to read O45 for the error log sheet name
         actualErrorLogSheetName = wbThis.Worksheets(CONFIG_SHEET_DEFAULT_NAME).Range("O45").Value
         On Error GoTo GlobalErrorHandler_M01 ' Restore main error handler
-        
+
         If Len(Trim(CStr(actualErrorLogSheetName))) = 0 Then
             actualErrorLogSheetName = "ErrorLog_Fallback_ConfigFail" ' Final fallback if O45 is empty/unreadable
             If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M01_MainControl.ExtractDataMain - Could not read ErrorLogSheetName from O45. Using fallback: " & actualErrorLogSheetName
         End If
-        
+
         MsgBox "Configシート「" & CONFIG_SHEET_DEFAULT_NAME & "」の読み込みに問題がありました。詳細は「" & actualErrorLogSheetName & "」シートを確認してください。処理を中断します。", vbCritical, "初期化エラー"
         Call M04_LogWriter.SafeWriteErrorLog(errorLevelForLog, wbThis, actualErrorLogSheetName, "M01_MainControl", "ExtractDataMain", "M02_ConfigReader.LoadConfigurationがFalseを返しました", 0, "Config読み込み失敗")
         GoTo FinalizeMacro_M01
@@ -69,7 +69,7 @@ Public Sub ExtractDataMain()
     ' --- 4. 出力シート準備フェーズ ---
     If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M01_MainControl.ExtractDataMain - Preparing output sheet."
     Call M03_SheetManager.PrepareOutputSheet(g_configSettings, wbThis, nextOutputRowVal) ' nextOutputRowVal gets starting row
-    
+
     On Error Resume Next ' Handle error if sheet still not found (should not happen if PrepareSheets worked)
     Set wsResultOutput = wbThis.Worksheets(g_configSettings.OutputSheetName)
     On Error GoTo GlobalErrorHandler_M01
@@ -79,7 +79,7 @@ Public Sub ExtractDataMain()
         GoTo FinalizeMacro_M01
     End If
     If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M01_MainControl.ExtractDataMain - Output sheet '" & wsResultOutput.Name & "' ready. Data will start at row " & nextOutputRowVal
-            
+
     ' --- 5. 検索条件ログ出力フェーズ ---
     ' ログシートが正常に準備された後に、検索条件ログを書き込みます。
     Call M04_LogWriter.WriteFilterLog(g_configSettings, wbThis)
@@ -93,7 +93,7 @@ Public Sub ExtractDataMain()
             For Each procFile In targetFiles
                 fileIdx = fileIdx + 1
                 If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG: M01_MainControl.ExtractDataMain - Processing file " & fileIdx & " of " & targetFiles.Count & ": '" & CStr(procFile) & "'"
-                
+
                 ' M06_DataExtractor.ExtractDataFromFile呼び出し
                 ' Optional引数 wsOutput, outputNextRow, currentFileNum, totalExtractedCount を渡す
                 If M06_DataExtractor.ExtractDataFromFile(CStr(procFile), g_configSettings, wbThis, wsResultOutput, nextOutputRowVal, fileIdx, totalExtractedCount) Then
@@ -127,7 +127,7 @@ GlobalErrorHandler_M01:
     errDesc = Err.Description
     errSource = Err.Source
     If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M01_MainControl.ExtractDataMain (GlobalErrorHandler_M01) - Error " & errNum & ": " & errDesc & " (Source: " & errSource & ")"
-    
+
     ' エラー情報をログに記録
     If g_errorLogWorksheet Is Nothing Then
         ' g_errorLogWorksheetが未設定の場合 (PrepareSheetsより前、または失敗時) はSafeWriteErrorLogを試みる
@@ -145,7 +145,7 @@ GlobalErrorHandler_M01:
         ' g_errorLogWorksheetが設定されていれば通常のWriteErrorLogを使用
         Call M04_LogWriter.WriteErrorLog("ERROR", "M01_MainControl", "ExtractDataMain (GlobalErrorHandler_M01)", errSource, errNum, errDesc, "処理中断")
     End If
-    
+
     MsgBox "エラーが発生しました。" & vbCrLf & _
            "エラー番号: " & errNum & vbCrLf & _
            "内容: " & errDesc & vbCrLf & _
