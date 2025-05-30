@@ -10,6 +10,10 @@ Public Const DEBUG_MODE_WARNING As Boolean = False ' 警告レベルのデバッ
 ' Fixed Setting Value Constant
 Public Const CONFIG_SHEET_DEFAULT_NAME As String = "Config (2)" ' 設定シートのデフォルト名
 
+' 作業員ヘッダー判定用デフォルト値
+Public Const DEFAULT_WORKER_HEADER_PREFIX As String = "作業員"
+Public Const DEFAULT_WORKER_HEADER_PREFIX_LENGTH As Long = 3
+
 ' User-Defined Type: tOffset
 Public Type tOffset
     Row As Long ' 行オフセット
@@ -60,6 +64,7 @@ Public Type tConfigSettings
     ProcessPatternColNumbers() As Variant    ' C-9から派生 現在のシートに対応する工程列数
 
     ' D. Filter Conditions
+    ExtractIfWorkersEmpty As Boolean      ' O241 作業員が空でも他項目に値があれば抽出フラグ
     WorkerFilterLogic As String         ' O242 作業員フィルター検索論理
     WorkerFilterList() As String        ' O243-O262 作業員フィルターリスト
     Kankatsu1FilterList() As String     ' O275-O294 管内1フィルターリスト

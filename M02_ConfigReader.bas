@@ -429,6 +429,17 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
             If DEBUG_MODE_WARNING Then Call ReportConfigError(m_errorOccurred, "LoadConfiguration (A-7)", "O122", "工程パターンデータ取得方法(O122)が不正または空のためFalse(VBA方式)を適用", targetWorkbook, configStruct.ErrorLogSheetName, False, "WARNING_CONFIG_DEFAULT")
         End If
     End If
+    
+    ' A-ExtractIfEmpty: 作業員空でも抽出フラグ (O241) - Technically a filter condition, but read with general flags
+    tempVal = GetCellValue(wsConfig, "O241", "LoadConfiguration (A-ExtractIfEmpty)", m_errorOccurred, "作業員空でも抽出フラグ (O241)", targetWorkbook, configStruct.ErrorLogSheetName, False, "Boolean")
+    If Not m_errorOccurred Then ' Check if GetCellValue itself caused a fatal error
+        If Not IsEmpty(tempVal) Then
+            configStruct.ExtractIfWorkersEmpty = tempVal
+        Else ' Value was empty or not a valid boolean string
+            configStruct.ExtractIfWorkersEmpty = False ' Default value
+            If DEBUG_MODE_WARNING Then Call ReportConfigError(m_errorOccurred, "LoadConfiguration (A-ExtractIfEmpty)", "O241", "作業員空でも抽出フラグ(O241)が不正または空のためFalseを適用", targetWorkbook, configStruct.ErrorLogSheetName, False, "WARNING_CONFIG_DEFAULT")
+        End If
+    End If
 
     ' --- B. 工程表ファイル内 設定 ---
     If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Reading Section B: Schedule File Settings"
@@ -807,6 +818,7 @@ FinalConfigCheck: ' Label for GoTo statements if errors occur in C or E
         Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   A-5. ErrorLogSheetName (O45): '" & configStruct.ErrorLogSheetName & "'"
         Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   A-6. ConfigSheetName (O46): '" & configStruct.ConfigSheetName & "'"
         Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   A-7. GetPatternDataMethod (O122): " & configStruct.GetPatternDataMethod
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   A-ExtractIfEmpty (O241): " & configStruct.ExtractIfWorkersEmpty
         Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:        ConfigSheetFullName: '" & configStruct.ConfigSheetFullName & "'"
         
         ' B. 工程表ファイル内 設定

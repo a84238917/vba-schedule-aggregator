@@ -330,16 +330,28 @@ Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tC
                          maxWorkersForThisProcess = 0 
                     End If
 
-                    ' Blank Row Check
-                    isRowAllEmpty = True
-                    If Len(CStr(extractedData(COL_KOUBAN))) > 0 Then isRowAllEmpty = False
-                    If Len(CStr(extractedData(COL_HENSHOUSHO))) > 0 Then isRowAllEmpty = False
-                    If Len(CStr(extractedData(COL_SAGYOMEI1))) > 0 Then isRowAllEmpty = False
-                    If Len(CStr(extractedData(COL_SAGYOMEI2))) > 0 Then isRowAllEmpty = False
-                    If actualExtractedWorkerCount > 0 Then isRowAllEmpty = False
+                    ' Blank Row Check (Revised based on O241: config.ExtractIfWorkersEmpty)
+                    Dim hasKeyOffsetData As Boolean
+                    hasKeyOffsetData = False
+                    If Len(CStr(extractedData(COL_KOUBAN))) > 0 Then hasKeyOffsetData = True
+                    If Not hasKeyOffsetData And Len(CStr(extractedData(COL_HENSHOUSHO))) > 0 Then hasKeyOffsetData = True '作業場所
+                    If Not hasKeyOffsetData And Len(CStr(extractedData(COL_SAGYOMEI1))) > 0 Then hasKeyOffsetData = True '作業名1
+                    If Not hasKeyOffsetData And Len(CStr(extractedData(COL_SAGYOMEI2))) > 0 Then hasKeyOffsetData = True '作業名2
+                    If Not hasKeyOffsetData And Len(CStr(extractedData(COL_TANTOU))) > 0 Then hasKeyOffsetData = True '担当の名前
+                    If Not hasKeyOffsetData And Len(CStr(extractedData(COL_KOUJISHURUI))) > 0 Then hasKeyOffsetData = True '工事種類
+                    If Not hasKeyOffsetData And Len(CStr(extractedData(COL_NINZU))) > 0 Then hasKeyOffsetData = True '人数
+                    ' Note: Kankatsu, Bunrui, Date, Year, Month, SheetName are not considered for "blankness" of core data here.
+                    ' Sonota, ShuuryoJikan, Bunrui1ExtSrc might also be considered key fields if appropriate. For now, using the main ones.
+
+                    If config.ExtractIfWorkersEmpty Then ' O241 is TRUE: 作業員が空でも他項目に値があれば抽出
+                        isRowAllEmpty = Not hasKeyOffsetData
+                    Else ' O241 is FALSE: 作業員が0人なら一覧に抽出しない (AND 他の主要項目も実質空ならスキップ)
+                        ' To be "not empty", we need worker(s) AND some other key data.
+                        isRowAllEmpty = Not (hasKeyOffsetData And actualExtractedWorkerCount > 0)
+                    End If
 
                     If isRowAllEmpty Then
-                        If Not filterLogSht Is Nothing Then Call M04_LogWriter.WriteFilterLogEntry(filterLogSht, GetNextFilterLogRow(filterLogSht), "空白行スキップ", kouteiFilePath & "/" & actualTargetSheetName & "/Day" & Format(dateInLoop, "dd") & "/Proc" & processIdx)
+                        If Not filterLogSht Is Nothing Then Call M04_LogWriter.WriteFilterLogEntry(filterLogSht, GetNextFilterLogRow(filterLogSht), "空白行スキップ(O241:" & config.ExtractIfWorkersEmpty & ")", kouteiFilePath & "/" & actualTargetSheetName & "/Day" & Format(dateInLoop, "dd") & "/Proc" & processIdx)
                         GoTo NextProcessInDay_M06
                     End If
 
