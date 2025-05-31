@@ -577,6 +577,7 @@ Private Function ConvertRawVariantToStringArray(ByVal rawData As Variant, ByVal 
             Debug.Print Now & " " & localFuncName & ": DEBUG - Failed LBound/UBound on 1st dimension for '" & itemName & "'. Error: " & Err.Description
             dbg_l1 = "Err:" & Err.Number: dbg_u1 = "Err:" & Err.Description ' Capture error for logging if needed
             Err.Clear
+            On Error GoTo ErrorHandler_CVTSA_Direct ' Restore before GoTo
             GoTo InvalidArrayStructure_CVTSA_Direct ' Treat as invalid structure
         End If
 
@@ -650,6 +651,7 @@ Private Function ConvertRawVariantToStringArray(ByVal rawData As Variant, ByVal 
             End If
         Else
 InvalidArrayStructure_CVTSA_Direct:
+            On Error GoTo ErrorHandler_CVTSA_Direct ' Ensure handler is set before logging (though WriteErrorLog has its own)
             If currentConfig.DebugDetailLevel2Enabled Then
                 tempMsg = itemName & " - 予期しない配列構造またはエラーのある配列 (呼び出し元: " & funcN_from_caller & "). L1:" & dbg_l1 & ", U1:" & dbg_u1 & ", L2:" & dbg_l2 & ", U2:" & dbg_u2 & ". 空として扱います。"
                 Call M04_LogWriter.WriteErrorLog("WARNING_L2", moduleN, localFuncName, tempMsg)
@@ -665,9 +667,9 @@ ErrorHandler_CVTSA_Direct:
     tempMsg = itemName & " の変換中に予期せぬエラー (呼び出し元: " & funcN_from_caller & ")"
     Debug.Print Now & " CRITICAL_ERROR in " & localFuncName & ": " & tempMsg & " Err# " & Err.Number & " - " & Err.Description
     ' Ensure tempList is a safe empty array before assigning to return value
-    On Error Resume Next ' Prevent error handler from erroring itself on ReDim
+    On Error Resume Next
     ReDim tempList(1 To 0)
-    On Error GoTo 0 ' Turn off error resume next
+    On Error GoTo 0
     ConvertRawVariantToStringArray = tempList
 End Function
 
