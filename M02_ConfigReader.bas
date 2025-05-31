@@ -604,10 +604,10 @@ Private Function ConvertRawVariantToStringArray(ByVal rawData As Variant, ByVal 
     Err.Clear ' Added Err.Clear
     Debug.Print Now & " CVTSA_Point_014a: After Err.Clear. Err.Number=" & Err.Number & ", Err.Description='" & Err.Description & "'"
     Debug.Print Now & " CVTSA_Point_014b: Before ReDim cvtsaTempArray(1 To 0). TypeName(cvtsaTempArray)=" & TypeName(cvtsaTempArray)
+    ' Initial ReDim cvtsaTempArray(1 To 0) REMOVED as per new logic
 
-    ReDim cvtsaTempArray(1 To 0)
-
-    Debug.Print Now & " CVTSA_Point_015: After ReDim cvtsaTempArray(1 To 0). TypeName(cvtsaTempArray)=" & TypeName(cvtsaTempArray) & ", LBound=" & LBound(cvtsaTempArray) & ", UBound=" & UBound(cvtsaTempArray) & ", Err.Number=" & Err.Number & ", Err.Description='" & Err.Description & "'"
+    Debug.Print Now & " CVTSA_Point_015: After initial ReDim was removed. TypeName(cvtsaTempArray)=" & TypeName(cvtsaTempArray) & ". Err.Number=" & Err.Number & ", Err.Description='" & Err.Description & "'"
+    ' Note: LBound/UBound checks here would fail if array is not yet dimensioned by data population.
 
     ' This is the first point where currentConfig is accessed for its members
     Debug.Print Now & " CVTSA_Point_015a: Before checking currentConfig.DebugDetailLevel2Enabled for " & itemName
@@ -727,6 +727,18 @@ InvalidArrayStructure_CVTSA_Direct:
         End If
     End If
 
+    If Not General_IsArrayInitialized(cvtsaTempArray) Then
+        Debug.Print Now & " CVTSA_INFO: cvtsaTempArray was not initialized by data population. Attempting ReDim (1 To 0)."
+        On Error Resume Next ' To catch the problematic ReDim
+        ReDim cvtsaTempArray(1 To 0)
+        If Err.Number <> 0 Then
+            Debug.Print Now & " CVTSA_ERR_FINAL_REDIM: Error " & Err.Number & " during final ReDim (1 To 0): " & Err.Description
+            ' As a fallback, create a truly empty array that should be safe
+            cvtsaTempArray = Split(vbNullString, Chr(1)) ' Chr(1) is unlikely to be in vbNullString, ensuring a 0-element array with LBound 0
+        End If
+        On Error GoTo ErrorHandler_CVTSA_Direct ' Restore original handler
+    End If
+
     ConvertRawVariantToStringArray = cvtsaTempArray
     Exit Function
 
@@ -743,7 +755,20 @@ ErrorHandler_CVTSA_Direct:
     ReDim cvtsaTempArray(1 To 0)
     Debug.Print Now & " CVTSA_Point_ERR_HANDLER_AFTER_REDIM: After ReDim in handler. TypeName(cvtsaTempArray)=" & TypeName(cvtsaTempArray) & ", LBound=" & LBound(cvtsaTempArray) & ", UBound=" & UBound(cvtsaTempArray) & ", Err.Number (after ReDim in handler)=" & Err.Number & ", Err.Description (after ReDim in handler)='" & Err.Description & "'"
     Err.Clear ' Clear any error that might have occurred during ReDim in handler
-    On Error GoTo 0 ' Restore default error handling
+    ' On Error GoTo 0 ' This will be restored after the check or by the final On Error GoTo 0 if an error occurs during the check
+
+    If Not General_IsArrayInitialized(cvtsaTempArray) Then
+        Debug.Print Now & " CVTSA_INFO_HANDLER: cvtsaTempArray not initialized in error handler. Attempting ReDim (1 To 0)."
+        On Error Resume Next ' To catch the problematic ReDim
+        ReDim cvtsaTempArray(1 To 0)
+        If Err.Number <> 0 Then
+            Debug.Print Now & " CVTSA_ERR_HANDLER_FINAL_REDIM: Error " & Err.Number & " during final ReDim (1 To 0) in handler: " & Err.Description
+            cvtsaTempArray = Split(vbNullString, Chr(1))
+        End If
+        ' No need to restore ErrorHandler_CVTSA_Direct as we are already in it.
+        ' The next On Error GoTo 0 will handle subsequent errors.
+    End If
+    On Error GoTo 0 ' Restore default error handling (or the main one for this handler scope)
 
     ConvertRawVariantToStringArray = cvtsaTempArray
     Debug.Print Now & " CVTSA_Point_ERR_EXIT: Exiting ErrorHandler_CVTSA_Direct for " & itemName
@@ -780,8 +805,16 @@ Public Function General_IsArrayInitialized(arr As Variant) As Boolean
         Exit Function
     End If
 
-    General_IsArrayInitialized = True
-
+    Dim l As Long, u As Long
+    On Error Resume Next
+    l = LBound(arr)
+    u = UBound(arr)
+    If Err.Number = 0 Then
+        General_IsArrayInitialized = True
+    Else
+        General_IsArrayInitialized = False
+    End If
+    On Error GoTo 0
 End Function
 
 Private Sub M02_LogError(ByVal moduleN As String, ByVal callerProcName As String, ByVal failedSubName As String, ByVal errNum As Long, ByVal errDesc As String)
