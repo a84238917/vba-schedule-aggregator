@@ -84,34 +84,52 @@ Public Sub PrepareRemainingLogSheets(ByRef config As tConfigSettings, ByVal wb A
     End If ' ★追加
     Set ws = Nothing ' Reset for next sheet
 
-    ' 汎用ログシートの準備 (Config O42: LogSheetName, controlled by O5: EnableSheetLogging)
-    ' This log is also controlled by EnableSheetLogging (O5)
+    ' 汎用ログシートの準備 (Config O42: LogSheetName)
+    Call M04_LogWriter.WriteErrorLog("DEBUG_M03", MODULE_NAME, funcName, "Attempting to prepare Generic Log Sheet. EnableSheetLogging (O5): " & config.EnableSheetLogging & ", LogSheetName (O42): " & config.LogSheetName)
+    Debug.Print Now & " M03.PrepareRemainingLogSheets: Attempting Generic Log. EnableSheetLogging=" & config.EnableSheetLogging & ", SheetName='" & config.LogSheetName & "'"
+
     If config.EnableSheetLogging And Trim(config.LogSheetName) <> "" Then
         Set ws = EnsureSheetExists(config.LogSheetName, wb, wasCreated)
-        Set g_genericLogWorksheet = ws ' ★ Set global worksheet object
-        If Not ws Is Nothing Then
+        Set g_genericLogWorksheet = ws ' Set global worksheet object
+
+        If g_genericLogWorksheet Is Nothing Then
+            Call M04_LogWriter.WriteErrorLog("ERROR", MODULE_NAME, funcName, "汎用ログシートオブジェクト(g_genericLogWorksheet)がNothingです。EnsureSheetExistsが失敗。シート名: " & config.LogSheetName)
+            Debug.Print Now & " M03.PrepareRemainingLogSheets: g_genericLogWorksheet is Nothing after EnsureSheetExists for: " & config.LogSheetName
+            g_nextGenericLogRow = 0 ' Reset or mark as invalid
+        Else
+            Call M04_LogWriter.WriteErrorLog("INFORMATION", MODULE_NAME, funcName, "汎用ログシートオブジェクト(g_genericLogWorksheet)セット完了。シート名: " & g_genericLogWorksheet.Name)
+            Debug.Print Now & " M03.PrepareRemainingLogSheets: g_genericLogWorksheet SET to: " & g_genericLogWorksheet.Name
+
+            Dim firstCellEmpty_GL As Boolean ' Use a distinct variable
             On Error Resume Next
-            firstCellEmpty = IsEmpty(ws.Cells(1, 1).Value)
-            On Error GoTo ErrorHandler_PrepareRemainingLogSheets
-            If wasCreated Or firstCellEmpty Then
-                Call WriteSheetHeaders(ws, "GenericLog", config)
+            firstCellEmpty_GL = IsEmpty(g_genericLogWorksheet.Cells(1, 1).value)
+            On Error GoTo ErrorHandler_PrepareRemainingLogSheets ' Restore error handler
+
+            If wasCreated Or firstCellEmpty_GL Then
+                Call M04_LogWriter.WriteErrorLog("DEBUG_M03", MODULE_NAME, funcName, "Generic Log Sheet: Writing headers as wasCreated=" & wasCreated & " or firstCellEmpty=" & firstCellEmpty_GL)
+                Debug.Print Now & " M03.PrepareRemainingLogSheets: Generic Log Sheet, wasCreated=" & wasCreated & ", firstCellEmpty=" & firstCellEmpty_GL & ". Writing headers."
+                Call WriteSheetHeaders(g_genericLogWorksheet, "GenericLog", config)
             End If
-            ' Initialize g_nextGenericLogRow
-            If Application.WorksheetFunction.CountA(ws.Rows(1)) = 0 Then
+
+            If Application.WorksheetFunction.CountA(g_genericLogWorksheet.Rows(1)) = 0 Then
                  g_nextGenericLogRow = 1
             Else
-                 g_nextGenericLogRow = ws.Cells(Rows.Count, "A").End(xlUp).Row + 1
+                 g_nextGenericLogRow = g_genericLogWorksheet.Cells(Rows.Count, "A").End(xlUp).Row + 1
             End If
             If g_nextGenericLogRow <= 0 Then g_nextGenericLogRow = 1
-        Else
-            Call M04_LogWriter.WriteErrorLog("ERROR", MODULE_NAME, funcName, "汎用ログシート「" & config.LogSheetName & "」の準備に失敗しました。")
-            Set g_genericLogWorksheet = Nothing ' Ensure it's Nothing if setup fails
-            g_nextGenericLogRow = 1 ' Reset
+            Call M04_LogWriter.WriteErrorLog("DEBUG_M03", MODULE_NAME, funcName, "g_nextGenericLogRow initialized to: " & g_nextGenericLogRow)
+            Debug.Print Now & " M03.PrepareRemainingLogSheets: g_nextGenericLogRow initialized to: " & g_nextGenericLogRow
         End If
     ElseIf config.EnableSheetLogging And Trim(config.LogSheetName) = "" Then
          Call M04_LogWriter.WriteErrorLog("WARNING", MODULE_NAME, funcName, "汎用ログシート名(O42)が設定されていませんが、シートログ(O5)は有効です。")
-         Set g_genericLogWorksheet = Nothing ' No sheet name, so no sheet object
-         g_nextGenericLogRow = 1 ' Reset
+         Debug.Print Now & " M03.PrepareRemainingLogSheets: Generic Log Sheet name is empty but EnableSheetLogging is True."
+         Set g_genericLogWorksheet = Nothing ' Ensure it's nothing
+         g_nextGenericLogRow = 0
+    Else ' EnableSheetLogging is False
+         Call M04_LogWriter.WriteErrorLog("DEBUG_M03", MODULE_NAME, funcName, "汎用ログシート(O42)への出力は無効です (O5がFALSE)。")
+         Debug.Print Now & " M03.PrepareRemainingLogSheets: Generic Log Sheet output is disabled (EnableSheetLogging is False)."
+         Set g_genericLogWorksheet = Nothing ' Ensure it's nothing
+         g_nextGenericLogRow = 0
     End If
     Set ws = Nothing
 

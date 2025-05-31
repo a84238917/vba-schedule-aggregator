@@ -15,33 +15,61 @@ Public Sub WriteErrorLog(ByVal errorLevel As String, ByVal moduleN As String, By
     Dim isDebugLog As Boolean
     isDebugLog = (Left(errorLevel, 6) = "DEBUG_")
 
+    ' ▼▼▼ Extended Debug.Print statements ▼▼▼
+    Debug.Print Now & " M04.WriteErrorLog: ENTER. errorLevel='" & errorLevel & "', isDebugLog=" & isDebugLog
+    If Not g_configSettings Is Nothing Then ' Check if g_configSettings itself is available
+        Debug.Print Now & " M04.WriteErrorLog: Config Flags: EnableSheetLogging(O5)=" & g_configSettings.EnableSheetLogging & _
+                      ", EnableErrorLogSheetOutput(O7)=" & g_configSettings.EnableErrorLogSheetOutput & _
+                      ", DebugDetailLevel1Enabled(O4)=" & g_configSettings.DebugDetailLevel1Enabled
+    Else
+        Debug.Print Now & " M04.WriteErrorLog: g_configSettings is Nothing. Cannot check flags."
+    End If
+
     If isDebugLog Then
-        If Not g_configSettings.EnableSheetLogging Then Exit Sub ' Controlled by O5 for generic/debug logs
+        Debug.Print Now & " M04.WriteErrorLog: DEBUG log detected. Target: GenericLogSheet."
+        If g_genericLogWorksheet Is Nothing Then
+            Debug.Print Now & " M04.WriteErrorLog: g_genericLogWorksheet is Nothing."
+        Else
+            Debug.Print Now & " M04.WriteErrorLog: g_genericLogWorksheet is '" & g_genericLogWorksheet.Name & "'. NextRow: " & g_nextGenericLogRow
+        End If
+
+        If Not g_configSettings.EnableSheetLogging Then ' Check O5 for DEBUG logs
+            Debug.Print Now & " M04.WriteErrorLog: Skipping DEBUG log to sheet as EnableSheetLogging (O5) is False."
+            Exit Sub
+        End If
         Set targetSheet = g_genericLogWorksheet
         targetNextRow = g_nextGenericLogRow
-        ' Potentially use different WriteErrorLog specific debug level for these internal prints
-        If g_configSettings.DebugDetailLevel1Enabled Then ' Or a higher level for this internal logging
-            Debug.Print Now & " WriteErrorLog REDIRECTING DEBUG: Level=" & errorLevel & ", TargetSheet=" & IIf(targetSheet Is Nothing, "Nothing", targetSheet.Name) & ", NextRow=" & targetNextRow
+    Else ' Not a DEBUG_ log
+        Debug.Print Now & " M04.WriteErrorLog: NON-DEBUG log detected. Target: ErrorLogSheet."
+        If g_errorLogWorksheet Is Nothing Then
+            Debug.Print Now & " M04.WriteErrorLog: g_errorLogWorksheet is Nothing."
+        Else
+            Debug.Print Now & " M04.WriteErrorLog: g_errorLogWorksheet is '" & g_errorLogWorksheet.Name & "'. NextRow: " & g_nextErrorLogRow
         End If
-    Else
-        ' For non-debug logs, proceed with error log sheet (already controlled by EnableErrorLogSheetOutput via g_errorLogWorksheet being Nothing or Set)
+
+        If Not g_configSettings.EnableErrorLogSheetOutput Then ' Check O7 for ERROR logs
+            Debug.Print Now & " M04.WriteErrorLog: Skipping ERROR log to sheet as EnableErrorLogSheetOutput (O7) is False."
+            ' Fallback to Debug.Print for non-debug logs if sheet output is off
+            Debug.Print Now & " WriteErrorLog FALLBACK (ErrorLogSheet Output Disabled O7=FALSE): Level=" & errorLevel & ", Mod=" & moduleN & ", Proc=" & procedureN & ", Msg=" & message
+            If errNumber <> 0 Then Debug.Print "  > Err #: " & errNumber & " - " & errDescription
+            Exit Sub
+        End If
         Set targetSheet = g_errorLogWorksheet
         targetNextRow = g_nextErrorLogRow
     End If
+    ' ▲▲▲ End of Extended Debug.Print statements ▲▲▲
 
-    If g_configSettings.DebugDetailLevel1Enabled And Not isDebugLog Then ' Only print non-debug calls to immediate if L1 is on
-        Debug.Print Now & " WriteErrorLog CALLED: Level=" & errorLevel & ", Mod=" & moduleN & ", Proc=" & procedureN & ", Msg=" & message & ", Err#=" & errNumber & ", ErrDesc=" & errDescription
+    ' Conditional Debug.Print for actual call details (only if L1 is on, and it's about to write to sheet)
+    If Not targetSheet Is Nothing And g_configSettings.DebugDetailLevel1Enabled Then
+        Debug.Print Now & " WriteErrorLog CALLED (will attempt sheet write): Level=" & errorLevel & ", Mod=" & moduleN & ", Proc=" & procedureN & ", Msg=" & message & ", Err#=" & errNumber & ", ErrDesc=" & errDescription
     End If
 
     On Error GoTo ErrorHandler_WriteErrorLog
 
     If targetSheet Is Nothing Then
-        If isDebugLog And g_configSettings.EnableSheetLogging Then ' If it was supposed to be a sheet log but sheet is not ready
-             Debug.Print Now & " WriteErrorLog FALLBACK (targetSheet for DEBUG is Nothing): Level=" & errorLevel & ", Mod=" & moduleN & ", Proc=" & procedureN & ", Msg=" & message
-        ElseIf Not isDebugLog Then ' Standard error log fallback
-             Debug.Print Now & " WriteErrorLog FALLBACK (g_errorLogWorksheet is Nothing): Level=" & errorLevel & ", Mod=" & moduleN & ", Proc=" & procedureN & ", Msg=" & message
-             If errNumber <> 0 Then Debug.Print "  > Err #: " & errNumber & " - " & errDescription
-        End If
+        ' This Debug.Print is a fallback if targetSheet ended up Nothing despite checks
+        Debug.Print Now & " WriteErrorLog FALLBACK (targetSheet is Nothing just before write): Level=" & errorLevel & ", Mod=" & moduleN & ", Proc=" & procedureN & ", Msg=" & message
+        If errNumber <> 0 And Not isDebugLog Then Debug.Print "  > Err #: " & errNumber & " - " & errDescription
         Exit Sub
     End If
 
