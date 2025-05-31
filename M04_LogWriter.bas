@@ -63,6 +63,8 @@ Public Sub WriteFilterLog(ByRef config As tConfigSettings, ByVal wb As Workbook)
     Dim nextLogWriteRow As Long
     Dim i As Long ' ループカウンタ
 
+    If Not config.EnableSheetLogging Then Exit Sub ' ★追加: シートロギングが無効なら終了
+
     On Error GoTo ErrorHandler
 
     If Trim(config.SearchConditionLogSheetName) = "" Then
@@ -154,7 +156,22 @@ Private Sub WriteFilterLogArrayEntry(ByVal ws As Worksheet, ByRef nextRow As Lon
     Dim i As Long
     Dim currentItemName As String
 
-    If Not General_IsArrayInitialized(arr) Then Exit Sub
+    If Not General_IsArrayInitialized(arr) Then Exit Sub ' 配列でない場合は終了
+
+    ' 要素が存在するかどうかを安全に確認
+    Dim hasElements As Boolean
+    hasElements = False ' Default to false
+    On Error Resume Next ' LBound/UBoundでエラーが発生するケースを考慮
+    If LBound(arr) <= UBound(arr) Then
+        hasElements = True
+    End If
+    If Err.Number <> 0 Then
+        hasElements = False ' LBound/UBoundでエラーなら要素なしとみなす
+        Err.Clear
+    End If
+    On Error GoTo 0
+
+    If Not hasElements Then Exit Sub ' 要素がなければ何もせず終了
 
     For i = LBound(arr) To UBound(arr)
         currentItemName = itemBaseName ' 配列の場合、要素ごとにインデックスを付けないシンプルなログ形式

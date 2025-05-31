@@ -436,7 +436,9 @@ Private Function ReadRangeToArray(ws As Worksheet, rangeAddress As String, modul
                 result(arrRead_i) = vbNullString
             End If
         Next arrRead_i
-        If nonEmptyCount = 0 Then Erase result
+        If nonEmptyCount = 0 Then
+            ReDim result(1 To 0) ' Ensure array is initialized even if empty
+        End If
     Else
         If Not IsEmpty(data) And Trim(CStr(data)) <> "" Then
             ReDim result(1 To 1): result(1) = Trim(CStr(data))
