@@ -166,30 +166,47 @@ FinalConfigCheck_LoadConfig:
         If configStruct.DebugDetailLevel3Enabled Then
             Dim dbgFSectionPrintIdx As Long, dbgGHeaderPrintIdx As Long
             Debug.Print "--- Loaded Configuration Settings (M02_ConfigReader) ---"
-            Debug.Print "F. IsOffsetDefinitionsValid: " & configStruct.IsOffsetDefinitionsValid
+            ' ... other L3 debug prints ...
 
+            Debug.Print "F. IsOffsetDefinitionsValid: " & configStruct.IsOffsetDefinitionsValid
+            ' Dim dbgFSectionPrintIdx As Long ' Already declared above
             Dim hasFSectionItemsToPrint As Boolean
             hasFSectionItemsToPrint = False
             If IsArray(configStruct.OffsetItemMasterNames) Then
-                If LBound(configStruct.OffsetItemMasterNames) <= UBound(configStruct.OffsetItemMasterNames) Then
-                    If Not (LBound(configStruct.OffsetItemMasterNames) = 1 And UBound(configStruct.OffsetItemMasterNames) = 0) Then
-                        hasFSectionItemsToPrint = True
+                On Error Resume Next ' Handle potential error if array is not initialized enough for LBound/UBound
+                Dim lboundTest As Long, uboundTest As Long
+                lboundTest = LBound(configStruct.OffsetItemMasterNames)
+                uboundTest = UBound(configStruct.OffsetItemMasterNames)
+                If Err.Number = 0 Then
+                    If lboundTest <= uboundTest Then
+                        ' This condition means the array is dimensioned and might have items.
+                        ' Specifically check if it's not just an empty (1 To 0) array.
+                        If Not (lboundTest = 1 And uboundTest = 0) Then
+                            hasFSectionItemsToPrint = True
+                        End If
                     End If
                 End If
+                On Error GoTo 0 ' Restore error handling
             End If
 
             If hasFSectionItemsToPrint Then
-                Debug.Print "  F. Extraction Data Offsets (Loaded " & UBound(configStruct.OffsetItemMasterNames) & " named items):"
+                Debug.Print "  F. Extraction Data Offsets (Loaded " & (UBound(configStruct.OffsetItemMasterNames) - LBound(configStruct.OffsetItemMasterNames) + 1) & " potential items):"
                 For dbgFSectionPrintIdx = LBound(configStruct.OffsetItemMasterNames) To UBound(configStruct.OffsetItemMasterNames)
-                    Debug.Print "    Item " & dbgFSectionPrintIdx & ". Name: '" & configStruct.OffsetItemMasterNames(dbgFSectionPrintIdx) & _
-                                  "', Offset: R=" & configStruct.OffsetDefinitions(dbgFSectionPrintIdx).Row & ", C=" & configStruct.OffsetDefinitions(dbgFSectionPrintIdx).Col & _
-                                  ", IsEmptyOrig: " & configStruct.IsOffsetOriginallyEmptyFlags(dbgFSectionPrintIdx)
+                    ' Safety for accessing related arrays, assuming they are of the same size if OffsetItemMasterNames has items
+                    If dbgFSectionPrintIdx <= UBound(configStruct.OffsetDefinitions) And dbgFSectionPrintIdx <= UBound(configStruct.IsOffsetOriginallyEmptyFlags) And _
+                       dbgFSectionPrintIdx >= LBound(configStruct.OffsetDefinitions) And dbgFSectionPrintIdx >= LBound(configStruct.IsOffsetOriginallyEmptyFlags) Then
+                        Debug.Print "    Item " & dbgFSectionPrintIdx & ". Name: '" & configStruct.OffsetItemMasterNames(dbgFSectionPrintIdx) & _
+                                      "', Offset: R=" & configStruct.OffsetDefinitions(dbgFSectionPrintIdx).Row & ", C=" & configStruct.OffsetDefinitions(dbgFSectionPrintIdx).Col & _
+                                      ", IsEmptyOrig: " & configStruct.IsOffsetOriginallyEmptyFlags(dbgFSectionPrintIdx)
+                    Else
+                        Debug.Print "    Item " & dbgFSectionPrintIdx & ". Name: '" & configStruct.OffsetItemMasterNames(dbgFSectionPrintIdx) & "' - (Offset data array bounds mismatch)"
+                    End If
                 Next dbgFSectionPrintIdx
             Else
                 If configStruct.IsOffsetDefinitionsValid Then
-                    Debug.Print "  F. No Offset Items Loaded (OffsetItemMasterNames is empty, but OffsetDefinitions structure was marked valid)."
+                    Debug.Print "  F. No Offset Items Loaded (OffsetItemMasterNames is empty or not properly dimensioned, but OffsetDefinitions structure was marked valid)."
                 Else
-                    Debug.Print "  F. No Offset Items Loaded (OffsetItemMasterNames is empty, and OffsetDefinitions structure was NOT marked valid or no items defined)."
+                    Debug.Print "  F. No Offset Items Loaded (OffsetItemMasterNames is empty or not properly dimensioned, and OffsetDefinitions structure was NOT marked valid or no items defined)."
                 End If
             End If
 
