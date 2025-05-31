@@ -535,24 +535,47 @@ ReadRangeErrorHandler:
 End Function
 
 Private Function ConvertRawVariantToStringArray(ByVal rawData As Variant, ByVal moduleN As String, ByVal funcN_from_caller As String, ByVal itemName As String, ByRef currentConfig As tConfigSettings) As String()
-    Debug.Print Now & " CVTSA_CALLED for: '" & itemName & "' from '" & funcN_from_caller & "'" ' ★★★ This is the added line ★★★
+    Debug.Print Now & " CVTSA_CALLED for: '" & itemName & "' from '" & funcN_from_caller & "'"
 
-    Dim tempList() As String ' ★ Re-introduced
-    Dim i As Long, r As Long
+    Debug.Print Now & " CVTSA_Point_001: Before Dim tempList()"
+    Dim tempList() As String
+    Debug.Print Now & " CVTSA_Point_002: After Dim tempList(), Before Dim i As Long"
+    Dim i As Long
+    Debug.Print Now & " CVTSA_Point_003: After Dim i As Long, Before Dim r As Long"
+    Dim r As Long
+    Debug.Print Now & " CVTSA_Point_004: After Dim r As Long, Before Dim count As Long"
     Dim count As Long
-    Dim lBound1 As Long, uBound1 As Long, lBound2 As Long, uBound2 As Long
+    Debug.Print Now & " CVTSA_Point_005: After Dim count As Long, Before Dim lBound1 As Long"
+    Dim lBound1 As Long
+    Debug.Print Now & " CVTSA_Point_006: After Dim lBound1 As Long, Before Dim uBound1 As Long"
+    Dim uBound1 As Long
+    Debug.Print Now & " CVTSA_Point_007: After Dim uBound1 As Long, Before Dim lBound2 As Long"
+    Dim lBound2 As Long
+    Debug.Print Now & " CVTSA_Point_008: After Dim lBound2 As Long, Before Dim uBound2 As Long"
+    Dim uBound2 As Long
+    Debug.Print Now & " CVTSA_Point_009: After Dim uBound2 As Long, Before Dim tempMsg As String"
     Dim tempMsg As String
+    Debug.Print Now & " CVTSA_Point_010: After Dim tempMsg As String, Before Dim localFuncName As String"
     Dim localFuncName As String
+    Debug.Print Now & " CVTSA_Point_011: After Dim localFuncName As String, Before localFuncName assignment"
     localFuncName = "ConvertRawVariantToStringArray"
+    Debug.Print Now & " CVTSA_Point_012: After localFuncName assignment, Before On Error GoTo 0"
 
-    On Error GoTo 0 ' Clear any pre-existing error handler from caller
-    On Error GoTo ErrorHandler_CVTSA_Direct ' Set specific handler for this function
+    On Error GoTo 0
+    Debug.Print Now & " CVTSA_Point_013: After On Error GoTo 0, Before On Error GoTo ErrorHandler_CVTSA_Direct"
+    On Error GoTo ErrorHandler_CVTSA_Direct
+    Debug.Print Now & " CVTSA_Point_014: After On Error GoTo ErrorHandler_CVTSA_Direct, Before ReDim tempList(1 To 0)"
 
-    ReDim tempList(1 To 0) ' Initialize to empty array
+    ReDim tempList(1 To 0)
+    Debug.Print Now & " CVTSA_Point_015: After ReDim tempList(1 To 0)"
 
+    ' This is the first point where currentConfig is accessed for its members
+    Debug.Print Now & " CVTSA_Point_015a: Before checking currentConfig.DebugDetailLevel2Enabled for " & itemName
     If currentConfig.DebugDetailLevel2Enabled Then
+        Debug.Print Now & " CVTSA_Point_016: Before First DEBUG_L2 Log Call for " & itemName
         tempMsg = "START for item: '" & itemName & "' (called by " & funcN_from_caller & "). TypeName(rawData): " & TypeName(rawData)
         Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, tempMsg)
+        Debug.Print Now & " CVTSA_Point_017: After First DEBUG_L2 Log Call for " & itemName
     End If
 
     If IsEmpty(rawData) Then
@@ -668,9 +691,9 @@ InvalidArrayStructure_CVTSA_Direct:
     Exit Function
 
 ErrorHandler_CVTSA_Direct:
+    Debug.Print Now & " CVTSA_Point_ERR: ENTERING ErrorHandler_CVTSA_Direct for " & itemName ' ★ Added this line
     tempMsg = itemName & " の変換中に予期せぬエラー (呼び出し元: " & funcN_from_caller & ")"
     Debug.Print Now & " CRITICAL_ERROR in " & localFuncName & ": " & tempMsg & " Err# " & Err.Number & " - " & Err.Description
-    ' Ensure tempList is a safe empty array before assigning to return value
     On Error Resume Next
     ReDim tempList(1 To 0)
     On Error GoTo 0
