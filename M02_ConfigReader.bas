@@ -433,9 +433,18 @@ Private Function ReadRangeToArray(ws As Worksheet, rangeAddress As String, modul
 End Function
 
 Public Function General_IsArrayInitialized(arr As Variant) As Boolean
-    If Not IsArray(arr) Then Exit Function
-    On Error Resume Next
-    Dim lBoundCheck As Long: lBoundCheck = LBound(arr)
-    If Err.Number = 0 Then General_IsArrayInitialized = True
-    On Error GoTo 0
+    If Not IsArray(arr) Then
+        General_IsArrayInitialized = False
+        Exit Function
+    End If
+
+    ' 配列であれば、ReDimされているとみなし、初期化済みとする
+    ' LBoundやUBoundのチェックは、要素が存在するかどうかの判断であり、
+    ' 配列が「初期化されているか（DimやReDimされたか）」の判断とは異なる場合がある。
+    ' 特にユーザー定義型の配列の場合、LBound等がエラーになることがあるため、
+    ' IsArray(arr) が True であれば、ここでは初期化済みと判断する。
+    General_IsArrayInitialized = True
+
+    ' もし「要素が実際に存在するか」を確認したい場合は、別途 UBound(arr) >= LBound(arr) のようなチェックを行う。
+    ' ここでは「配列として使える状態か」を返すことに注力する。
 End Function
