@@ -162,7 +162,7 @@ FinalConfigCheck: ' Label for potential GoTo from F-Section if error occurs
 
     ' --- G. 出力シート設定 ---
     If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Reading Section G: Output Sheet Settings"
-    configStruct.OutputHeaderRowCount = CLng(Nz(wsConfig.Range("O811").Value, 1)) ' Default to 1 if empty
+    configStruct.OutputHeaderRowCount = IIf(IsEmpty(wsConfig.Range("O811").Value) Or IsNull(wsConfig.Range("O811").Value), 1, CLng(wsConfig.Range("O811").Value)) ' Default to 1 if empty
     If configStruct.OutputHeaderRowCount <= 0 Then configStruct.OutputHeaderRowCount = 1 ' Ensure at least 1
 
     If configStruct.OutputHeaderRowCount > 0 Then

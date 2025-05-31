@@ -183,7 +183,7 @@ Private Sub WriteSheetHeaders(ByVal ws As Worksheet, ByVal sheetType As String, 
                 Dim singleRowHeaders() As String
                 For r = 1 To config.OutputHeaderRowCount
                     If r >= LBound(config.OutputHeaderContents) And r <= UBound(config.OutputHeaderContents) Then
-                        singleRowHeaders = Split(config.OutputHeaderContents(r), ",") ' カンマ区切りを想定
+                        singleRowHeaders = Split(config.OutputHeaderContents(r), vbTab) ' タブ区切りを想定
                         For c = 0 To UBound(singleRowHeaders)
                            ws.Cells(r, c + 1).Value = Trim(singleRowHeaders(c))
                         Next c
