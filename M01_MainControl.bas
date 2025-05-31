@@ -8,37 +8,62 @@ Option Explicit
 Public Sub ExtractDataMain()
     Dim startTime As Date
     startTime = Now()
+    Dim wsConfig As Worksheet ' For initial config reading
+    Dim tempConfigSheetName As String
+    Dim tempErrorLogSheetName As String
 
-    g_nextErrorLogRow = 1 ' エラーログの最初の書き込み行を初期化
+    ' --- Phase 1: Initialize and Prepare Error Logging ASAP ---
+    g_nextErrorLogRow = 1 ' Initialize error log row counter
 
-    On Error GoTo ErrorHandler
+    On Error GoTo ErrorHandler_ExtractDataMain ' Changed label for clarity
 
-    ' 1. 設定構造体の初期化
+    ' 1a. Initialize basic config structure
     Call InitializeConfigStructure(g_configSettings)
-    g_configSettings.ScriptFullName = ThisWorkbook.FullName ' マクロファイルのフルパスを格納
-    g_configSettings.ConfigSheetName = CONFIG_SHEET_DEFAULT_NAME ' Configシートのデフォルト名を設定
+    g_configSettings.ScriptFullName = ThisWorkbook.FullName
+    tempConfigSheetName = CONFIG_SHEET_DEFAULT_NAME ' Default, can be refined if O46 is read here too
 
-    ' 2. 設定の読み込み
-    ' M02_ConfigReader.LoadConfiguration は g_configSettings と ThisWorkbook を引数に取るように変更想定
-    If Not M02_ConfigReader.LoadConfiguration(g_configSettings, ThisWorkbook, g_configSettings.ConfigSheetName) Then
-        MsgBox "設定の読み込みに失敗しました。処理を中断します。", vbCritical, "設定エラー"
-        GoTo FinalizeRoutine
+    ' 1b. Get Config Worksheet Object
+    On Error Resume Next
+    Set wsConfig = ThisWorkbook.Worksheets(tempConfigSheetName)
+    On Error GoTo ErrorHandler_ExtractDataMain
+    If wsConfig Is Nothing Then
+        MsgBox "Configシート「" & tempConfigSheetName & "」が見つかりません。処理を中断します。", vbCritical, "致命的エラー"
+        GoTo FinalizeRoutine_ExtractDataMain ' Changed label
     End If
+    g_configSettings.configSheetName = wsConfig.Name ' Store actual name
+    g_configSettings.ConfigSheetFullName = ThisWorkbook.FullName & " | " & wsConfig.Name
 
-    ' MainWorkbookObjectをここで設定 (LoadConfiguration後、各種ログ記録のため)
-    ' これは LoadConfiguration 内か、直後に行うべき。ただし、LoadConfiguration が ThisWorkbook を必要とするならその前に。
-    ' グローバル変数のg_configSettings.MainWorkbookObjectはこのモジュール内で設定する方針。
-    Set g_configSettings.MainWorkbookObject = ThisWorkbook
 
-    ' 3. ログシートの準備と初期ログ情報書き込み
-    ' エラーログシートはPrepareSheets内で設定される g_errorLogWorksheet を使用
-    ' M03_SheetManager.PrepareSheets は g_configSettings と ThisWorkbook を引数に取るように変更想定
-    Call M03_SheetManager.PrepareSheets(g_configSettings, ThisWorkbook)
+    ' 1c. Read ONLY ErrorLogSheetName from Config sheet
+    ' Assuming M02_ConfigReader.ReadStringCell can be used carefully or implement a direct read here
+    tempErrorLogSheetName = Trim(CStr(wsConfig.Range("O45").value))
+    If tempErrorLogSheetName = "" Then tempErrorLogSheetName = "エラーログ" ' Fallback default
+    g_configSettings.ErrorLogSheetName = tempErrorLogSheetName
 
-    ' M04_LogWriter.WriteFilterLog は g_configSettings と ThisWorkbook を引数に取るように変更想定
-    Call M04_LogWriter.WriteFilterLog(g_configSettings, ThisWorkbook)
+    ' 1d. Prepare Error Log Sheet (g_errorLogWorksheet will be set globally by this call)
+    ' This call must ensure g_errorLogWorksheet is set, even if M04_LogWriter is used internally by M03
+    Call M03_SheetManager.PrepareErrorLogSheet(g_configSettings, ThisWorkbook)
+    If g_errorLogWorksheet Is Nothing Then
+        MsgBox "エラーログシートの準備に失敗しました。詳細はDebug.Print出力を確認してください。処理を中断します。", vbCritical, "致命的エラー"
+        GoTo FinalizeRoutine_ExtractDataMain
+    End If
+    Call M04_LogWriter.WriteErrorLog("INFORMATION", "MainControl", "ExtractDataMain", "エラーログシート準備完了。")
 
-    ' 4. データ抽出処理のメインループ
+
+    ' --- Phase 2: Load Full Configuration ---
+    ' Now that error logging is set up, proceed with full configuration loading
+    If Not M02_ConfigReader.LoadConfiguration(g_configSettings, ThisWorkbook, g_configSettings.configSheetName) Then
+        Call M04_LogWriter.WriteErrorLog("CRITICAL", "MainControl", "ExtractDataMain", "設定の読み込みに失敗しました。処理を中断します。")
+        MsgBox "設定の読み込みに失敗しました。処理を中断します。", vbCritical, "設定エラー"
+        GoTo FinalizeRoutine_ExtractDataMain
+    End If
+    Set g_configSettings.MainWorkbookObject = ThisWorkbook ' Set after successful LoadConfiguration
+
+    ' --- Phase 3: Prepare Remaining Log Sheets and Initial Log Entries ---
+    Call M03_SheetManager.PrepareRemainingLogSheets(g_configSettings, ThisWorkbook)
+    Call M04_LogWriter.WriteFilterLog(g_configSettings, ThisWorkbook) ' FilterLog uses EnableSheetLogging flag internally
+
+    ' --- Phase 4: Main Data Extraction Loop ---
     Dim i As Long
     Dim fileSystemObj As Object ' FileSystemObject
     Set fileSystemObj = CreateObject("Scripting.FileSystemObject")
@@ -50,7 +75,7 @@ Public Sub ExtractDataMain()
     If Not General_IsArrayInitialized(g_configSettings.TargetFileFolderPaths) Then
         Call M04_LogWriter.WriteErrorLog("INFORMATION", "MainControl", "ExtractDataMain", "処理対象ファイル/フォルダパスリスト(TargetFileFolderPaths)が空または未初期化です。処理をスキップします。")
         MsgBox "処理対象のファイルまたはフォルダが設定されていません。", vbInformation, "情報"
-        GoTo FinalizeRoutine
+        GoTo FinalizeRoutine_ExtractDataMain
     End If
 
     For i = LBound(g_configSettings.TargetFileFolderPaths) To UBound(g_configSettings.TargetFileFolderPaths)
@@ -109,7 +134,7 @@ NextIteration:
     Call M04_LogWriter.WriteErrorLog("INFORMATION", "MainControl", "ExtractDataMain", "マクロ処理が正常に完了しました。処理時間: " & timeTaken)
     MsgBox "マクロ処理が完了しました。" & vbCrLf & "処理時間: " & timeTaken, vbInformation, "処理完了"
 
-FinalizeRoutine:
+FinalizeRoutine_ExtractDataMain:
     On Error Resume Next ' エラーがあっても後処理は実行
     Set fileSystemObj = Nothing
     Set currentFile = Nothing
@@ -119,7 +144,7 @@ FinalizeRoutine:
     On Error GoTo 0
     Exit Sub
 
-ErrorHandler:
+ErrorHandler_ExtractDataMain:
     Dim errorMsg As String
     Dim errModule As String
     Dim errProc As String
@@ -145,7 +170,7 @@ ErrorHandler:
     End If
 
     MsgBox errorMsg, vbCritical, "実行時エラー"
-    Resume FinalizeRoutine
+    Resume FinalizeRoutine_ExtractDataMain
 End Sub
 
 ' Private Sub: InitializeConfigStructure
