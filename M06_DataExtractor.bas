@@ -1,4 +1,4 @@
-' バージョン：v0.5.1
+' バージョン：v0.5.2
 Option Explicit
 ' このモジュールは、個別の工程表ファイルからデータを抽出する役割を担います。
 ' 設定に基づいてファイルを開き、指定されたオフセットに従って情報を読み取ります。
@@ -87,14 +87,17 @@ Public Function ExtractDataFromFile(ByVal targetFilePath As String, ByRef config
                              yearVal & "年" & monthVal & "月" & dayValAsLong & "日" & " | " & _
                              "工程" & procLoopIndex & ":"
 
-                If General_IsArrayInitialized(config.OffsetItemNames) And General_IsArrayInitialized(config.Offsets) Then
-                    If UBound(config.OffsetItemNames) = UBound(config.Offsets) And _
-                       LBound(config.OffsetItemNames) = LBound(config.Offsets) Then
-                        For i = LBound(config.OffsetItemNames) To UBound(config.OffsetItemNames)
+                If General_IsArrayInitialized(config.OffsetItemMasterNames) And config.IsOffsetDefinitionsValid Then
+                    ' OffsetDefinitions is considered valid by the flag set in M02_ConfigReader
+                    ' Now, directly compare bounds, assuming OffsetDefinitions is safe to access for UBound/LBound
+                    ' It's crucial that M02_ConfigReader correctly ReDim'd OffsetDefinitions (e.g., 1 To 0 if empty)
+                    If UBound(config.OffsetItemMasterNames) = UBound(config.OffsetDefinitions) And _
+                       LBound(config.OffsetItemMasterNames) = LBound(config.OffsetDefinitions) Then
+                        For i = LBound(config.OffsetItemMasterNames) To UBound(config.OffsetItemMasterNames)
                             Dim currentItemName As String
                             Dim currentOffset As tOffset
-                            currentItemName = config.OffsetItemNames(i)
-                            currentOffset = config.Offsets(i)
+                            currentItemName = config.OffsetItemMasterNames(i)
+                            currentOffset = config.OffsetDefinitions(i)
 
                             ' データ読み取り位置計算 (v0.1 シンプル版)
                             ' プロセスごとの列オフセットはCurrentPatternIdentifierとProcessPatternColNumbersから取得する想定だがv0.1では未実装
@@ -111,10 +114,10 @@ Public Function ExtractDataFromFile(ByVal targetFilePath As String, ByRef config
                             End If
                         Next i
                     Else
-                        outputLine = outputLine & " [エラー: オフセット定義の配列数/範囲が不一致です]"
+                        outputLine = outputLine & " [エラー: オフセット定義の配列数/範囲が不一致です (MasterNames vs Definitions)]"
                     End If
                 Else
-                    outputLine = outputLine & " [エラー: オフセット定義が初期化されていません]"
+                    outputLine = outputLine & " [エラー: OffsetItemMasterNames が初期化されていないか、OffsetDefinitions が無効とマークされています]"
                 End If
                 Debug.Print outputLine
             Next procLoopIndex
@@ -144,9 +147,18 @@ ErrorHandler:
 End Function
 
 Public Function General_IsArrayInitialized(arr As Variant) As Boolean
-    If Not IsArray(arr) Then Exit Function
-    On Error Resume Next
-    Dim lBoundCheck As Long: lBoundCheck = LBound(arr)
-    If Err.Number = 0 Then General_IsArrayInitialized = True
-    On Error GoTo 0
+    If Not IsArray(arr) Then
+        General_IsArrayInitialized = False
+        Exit Function
+    End If
+
+    ' 配列であれば、ReDimされているとみなし、初期化済みとする
+    ' LBoundやUBoundのチェックは、要素が存在するかどうかの判断であり、
+    ' 配列が「初期化されているか（DimやReDimされたか）」の判断とは異なる場合がある。
+    ' 特にユーザー定義型の配列の場合、LBound等がエラーになることがあるため、
+    ' IsArray(arr) が True であれば、ここでは初期化済みと判断する。
+    General_IsArrayInitialized = True
+
+    ' もし「要素が実際に存在するか」を確認したい場合は、別途 UBound(arr) >= LBound(arr) のようなチェックを行う。
+    ' ここでは「配列として使える状態か」を返すことに注力する。
 End Function

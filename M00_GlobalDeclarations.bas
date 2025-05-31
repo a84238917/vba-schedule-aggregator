@@ -1,4 +1,4 @@
-' バージョン：v0.5.1
+' バージョン：v0.5.2
 Option Explicit
 ' このモジュールは、プロジェクト全体で共有されるグローバル定数、Publicなユーザー定義型、およびPublicなグローバル変数を一元的に宣言・管理します。
 
@@ -30,9 +30,14 @@ End Type
 Public Type tConfigSettings
     ' A. General Settings
     DebugModeFlag As Boolean              ' O3 デバッグモードフラグ
-    TraceDebugEnabled As Boolean          ' O4 詳細トレースデバッグ有効フラグ (旧DEBUG_MODE_DETAIL)
-    EnableSheetLogging As Boolean   ' O5 汎用ログシートへの出力有効フラグ
-    LogSheetName As String          ' O42 汎用ログシート名
+    ' TraceDebugEnabled As Boolean          ' O4 詳細トレースデバッグ有効フラグ ' Removed/Commented
+    EnableSheetLogging As Boolean         ' O5 汎用ログシートへの出力有効フラグ (★GenericLog用)
+    EnableSearchConditionLogSheetOutput As Boolean ' O6 ★追加: 検索条件ログシート出力ON/OFF
+    EnableErrorLogSheetOutput As Boolean    ' O7 ★追加: エラーログシート出力ON/OFF
+    DebugDetailLevel1Enabled As Boolean   ' O4: For critical/current debug info
+    DebugDetailLevel2Enabled As Boolean   ' O8: For detailed operational flow
+    DebugDetailLevel3Enabled As Boolean   ' O9: For verbose config dumps, resolved debug info
+    LogSheetName As String                ' O42 汎用ログシート名
     DefaultFolderPath As String           ' O12 デフォルトフォルダパス
     OutputSheetName As String             ' O43 抽出結果出力シート名
     SearchConditionLogSheetName As String ' O44 検索条件ログシート名
@@ -91,6 +96,7 @@ Public Type tConfigSettings
     OffsetItemMasterNames() As String      ' Config N列のオフセット項目名リスト(F-1)
     OffsetDefinitions() As tOffset         ' Config O列のパースされたオフセット定義
     IsOffsetOriginallyEmptyFlags() As Boolean ' Config O列が元々空だったかのフラグ
+    IsOffsetDefinitionsValid As Boolean    ' ★追加: OffsetDefinitionsが有効かを示すフラグ
 
     ' G. Output Sheet Settings
     OutputHeaderRowCount As Long    ' O811 出力シートヘッダー行数
@@ -111,4 +117,6 @@ End Type
 Public g_configSettings As tConfigSettings   ' Configシートから読み込まれた全ての設定情報を格納するグローバル変数
 Public g_errorLogWorksheet As Worksheet      ' エラーログを書き込むワークシートオブジェクト
 Public g_nextErrorLogRow As Long             ' エラーログシートの次に書き込む行番号
+Public g_genericLogWorksheet As Worksheet    ' 汎用ログ（デバッグログ含む）を書き込むワークシートオブジェクト
+Public g_nextGenericLogRow As Long           ' 汎用ログシートの次に書き込む行番号
 Public Const MAX_WORKERS_TO_EXTRACT As Long = 10 ' 抽出する作業員の最大数
