@@ -730,10 +730,18 @@ FinalConfigCheck: ' Label for GoTo statements if errors occur in C or E
 
         ' G. 出力シート設定
         Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   G-1. OutputHeaderRowCount (O811): " & configStruct.OutputHeaderRowCount
-        If ConfigReader_IsArrayInitialized(configStruct.OutputHeaderContents) Then
-             Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   G-2. OutputHeaderContents (O812-O821): " & Join(configStruct.OutputHeaderContents, " | ")
+
+        Dim fIdx As Long ' Re-using fIdx for this loop, ensure it's not conflicting if moved
+        If configStruct.OutputHeaderRowCount > 0 And ConfigReader_IsArrayInitialized(configStruct.OutputHeaderContents) And LBound(configStruct.OutputHeaderContents) = 1 And UBound(configStruct.OutputHeaderContents) = configStruct.OutputHeaderRowCount Then
+            Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   G-2. OutputHeaderContents (O812-O" & (811 + configStruct.OutputHeaderRowCount) & "):"
+            Dim i_hdr_dbg As Long
+            For i_hdr_dbg = 1 To configStruct.OutputHeaderRowCount
+                Dim strHdrLine As String: strHdrLine = configStruct.OutputHeaderContents(i_hdr_dbg)
+                Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:     Row " & i_hdr_dbg & " (Cell O" & (811 + i_hdr_dbg) & "): [" & strHdrLine & "]"
+                Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:       vbTab count for Row " & i_hdr_dbg & ": " & (Len(strHdrLine) - Len(Replace(strHdrLine, vbTab, "")))
+            Next i_hdr_dbg
         Else
-             Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   G-2. OutputHeaderContents (O812-O821): (Not Initialized or Empty)"
+            Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   G-2. OutputHeaderContents: (OutputHeaderRowCount is " & configStruct.OutputHeaderRowCount & ", Array Not Initialized, or Array bounds mismatch)"
         End If
         Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG:   G-3. OutputDataOption (O1124): '" & configStruct.OutputDataOption & "'"
 
