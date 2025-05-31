@@ -153,7 +153,7 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
         Dim currentItemContext As String
         currentItemContext = "HideSheetNames (O1127:O1146)"
         rawHideSheetNames = ReadRangeToArray(wsConfig, "O1127:O1146", MODULE_NAME, funcName, currentItemContext)
-        configStruct.HideSheetNames = ConvertRawVariantToStringArray(rawHideSheetNames, MODULE_NAME, funcName, currentItemContext)
+        configStruct.HideSheetNames = ConvertRawVariantToStringArray(rawHideSheetNames, MODULE_NAME, funcName, currentItemContext, configStruct) ' Added configStruct
         Call DebugPrintArrayState(configStruct.HideSheetNames, currentItemContext, configStruct)
 
     End If
@@ -262,7 +262,7 @@ Private Sub LoadScheduleFileSettings(ByRef config As tConfigSettings, ByVal ws A
 
     currentItem = "TargetSheetNames (O66:O75)"
     rawData = ReadRangeToArray(ws, "O66:O75", MODULE_NAME, funcName, currentItem)
-    config.TargetSheetNames = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
+    config.TargetSheetNames = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem, config) ' Added config
     Call DebugPrintArrayState(config.TargetSheetNames, currentItem, config)
 
     currentItem = "HeaderRowCount (O87)"
@@ -304,32 +304,32 @@ Private Sub LoadProcessPatternDefinition(ByRef config As tConfigSettings, ByVal 
 
     currentItem = "ProcessKeys (I129:I" & (128 + numProcesses) & ")"
     rawData = ReadRangeToArray(ws, "I129:I" & (128 + numProcesses), MODULE_NAME, funcName, currentItem)
-    config.ProcessKeys = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
+    config.ProcessKeys = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem, config) ' Added config
     Call DebugPrintArrayState(config.ProcessKeys, currentItem, config)
 
     currentItem = "Kankatsu1List (J129:J" & (128 + numProcesses) & ")"
     rawData = ReadRangeToArray(ws, "J129:J" & (128 + numProcesses), MODULE_NAME, funcName, currentItem)
-    config.Kankatsu1List = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
+    config.Kankatsu1List = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem, config) ' Added config
     Call DebugPrintArrayState(config.Kankatsu1List, currentItem, config)
 
     currentItem = "Kankatsu2List (K129:K" & (128 + numProcesses) & ")"
     rawData = ReadRangeToArray(ws, "K129:K" & (128 + numProcesses), MODULE_NAME, funcName, currentItem)
-    config.Kankatsu2List = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
+    config.Kankatsu2List = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem, config) ' Added config
     Call DebugPrintArrayState(config.Kankatsu2List, currentItem, config)
 
     currentItem = "Bunrui1List (L129:L" & (128 + numProcesses) & ")"
     rawData = ReadRangeToArray(ws, "L129:L" & (128 + numProcesses), MODULE_NAME, funcName, currentItem)
-    config.Bunrui1List = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
+    config.Bunrui1List = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem, config) ' Added config
     Call DebugPrintArrayState(config.Bunrui1List, currentItem, config)
 
     currentItem = "Bunrui2List (M129:M" & (128 + numProcesses) & ")"
     rawData = ReadRangeToArray(ws, "M129:M" & (128 + numProcesses), MODULE_NAME, funcName, currentItem)
-    config.Bunrui2List = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
+    config.Bunrui2List = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem, config) ' Added config
     Call DebugPrintArrayState(config.Bunrui2List, currentItem, config)
 
     currentItem = "Bunrui3List (N129:N" & (128 + numProcesses) & ")"
     rawData = ReadRangeToArray(ws, "N129:N" & (128 + numProcesses), MODULE_NAME, funcName, currentItem)
-    config.Bunrui3List = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
+    config.Bunrui3List = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem, config) ' Added config
     Call DebugPrintArrayState(config.Bunrui3List, currentItem, config)
 
     currentItem = "ProcessColCountSheetHeaders (O128:X128)"
@@ -392,17 +392,17 @@ Private Sub LoadFilterConditions(ByRef config As tConfigSettings, ByVal ws As Wo
 
     currentItem = "WorkerFilterList (O243:O262)"
     rawData = ReadRangeToArray(ws, "O243:O262", MODULE_NAME, funcName, currentItem)
-    config.WorkerFilterList = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
+    config.WorkerFilterList = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem, config) ' Added config
     Call DebugPrintArrayState(config.WorkerFilterList, currentItem, config)
 
     currentItem = "Kankatsu1FilterList (O275:O294)"
     rawData = ReadRangeToArray(ws, "O275:O294", MODULE_NAME, funcName, currentItem)
-    config.Kankatsu1FilterList = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
+    config.Kankatsu1FilterList = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem, config) ' Added config
     Call DebugPrintArrayState(config.Kankatsu1FilterList, currentItem, config)
 
     currentItem = "Kankatsu2FilterList (O305:O334)"
     rawData = ReadRangeToArray(ws, "O305:O334", MODULE_NAME, funcName, currentItem)
-    config.Kankatsu2FilterList = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
+    config.Kankatsu2FilterList = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem, config) ' Added config
     Call DebugPrintArrayState(config.Kankatsu2FilterList, currentItem, config)
 
     currentItem = "Bunrui1Filter (O346)"
@@ -414,22 +414,22 @@ Private Sub LoadFilterConditions(ByRef config As tConfigSettings, ByVal ws As Wo
 
     currentItem = "KoujiShuruiFilterList (O409:O418)"
     rawData = ReadRangeToArray(ws, "O409:O418", MODULE_NAME, funcName, currentItem)
-    config.KoujiShuruiFilterList = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
+    config.KoujiShuruiFilterList = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem, config) ' Added config
     Call DebugPrintArrayState(config.KoujiShuruiFilterList, currentItem, config)
 
     currentItem = "KoubanFilterList (O431:O440)"
     rawData = ReadRangeToArray(ws, "O431:O440", MODULE_NAME, funcName, currentItem)
-    config.KoubanFilterList = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
+    config.KoubanFilterList = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem, config) ' Added config
     Call DebugPrintArrayState(config.KoubanFilterList, currentItem, config)
 
     currentItem = "SagyoushuruiFilterList (O451:O470)"
     rawData = ReadRangeToArray(ws, "O451:O470", MODULE_NAME, funcName, currentItem)
-    config.SagyoushuruiFilterList = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
+    config.SagyoushuruiFilterList = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem, config) ' Added config
     Call DebugPrintArrayState(config.SagyoushuruiFilterList, currentItem, config)
 
     currentItem = "TantouFilterList (O481:O490)"
     rawData = ReadRangeToArray(ws, "O481:O490", MODULE_NAME, funcName, currentItem)
-    config.TantouFilterList = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
+    config.TantouFilterList = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem, config) ' Added config
     Call DebugPrintArrayState(config.TantouFilterList, currentItem, config)
 
     currentItem = "NinzuFilter (O503)"
@@ -441,7 +441,7 @@ Private Sub LoadFilterConditions(ByRef config As tConfigSettings, ByVal ws As Wo
 
     currentItem = "SagyouKashoFilterList (O525:O544)"
     rawData = ReadRangeToArray(ws, "O525:O544", MODULE_NAME, funcName, currentItem)
-    config.SagyouKashoFilterList = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
+    config.SagyouKashoFilterList = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem, config) ' Added config
     Call DebugPrintArrayState(config.SagyouKashoFilterList, currentItem, config)
 
     Exit Sub
@@ -457,12 +457,12 @@ Private Sub LoadTargetFileDefinition(ByRef config As tConfigSettings, ByVal ws A
 
     currentItem = "TargetFileFolderPaths (P557:P756)"
     rawData = ReadRangeToArray(ws, "P557:P756", MODULE_NAME, funcName, currentItem)
-    config.TargetFileFolderPaths = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
+    config.TargetFileFolderPaths = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem, config) ' Added config
     Call DebugPrintArrayState(config.TargetFileFolderPaths, currentItem, config)
 
     currentItem = "FilePatternIdentifiers (Q557:Q756)"
     rawData = ReadRangeToArray(ws, "Q557:Q756", MODULE_NAME, funcName, currentItem)
-    config.FilePatternIdentifiers = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
+    config.FilePatternIdentifiers = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem, config) ' Added config
     Call DebugPrintArrayState(config.FilePatternIdentifiers, currentItem, config)
 
     Exit Sub
@@ -521,81 +521,128 @@ ReadRangeErrorHandler:
     ReadRangeToArray = Empty ' Return Empty on error
 End Function
 
-Private Function ConvertRawVariantToStringArray(ByVal rawData As Variant, ByVal moduleN As String, ByVal funcN As String, ByVal itemName As String) As String()
+Private Function ConvertRawVariantToStringArray(ByVal rawData As Variant, ByVal moduleN As String, ByVal funcN As String, ByVal itemName As String, ByRef currentConfig As tConfigSettings) As String()
+    ' Pass currentConfig for debug flag checking
     Dim tempList() As String
     Dim i As Long, r As Long
     Dim count As Long
     Dim lBound1 As Long, uBound1 As Long, lBound2 As Long, uBound2 As Long
+    Dim tempMsg As String
+
+    If currentConfig.DebugDetailLevel2Enabled Then
+        tempMsg = "ConvertRawVariantToStringArray START for item: '" & itemName & "'. TypeName(rawData): " & TypeName(rawData)
+        Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, funcN, tempMsg)
+    End If
 
     If IsEmpty(rawData) Then
+        If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, funcN, itemName & " - rawData is Empty. Returning empty array (1 To 0).")
         ReDim tempList(1 To 0)
     ElseIf Not IsArray(rawData) Then
+        If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, funcN, itemName & " - rawData is Scalar. Value: '" & CStr(rawData) & "'")
         If Trim(CStr(rawData)) <> "" Then
             ReDim tempList(1 To 1)
             tempList(1) = Trim(CStr(rawData))
+            If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, funcN, itemName & " - Scalar converted to 1-element array.")
         Else
             ReDim tempList(1 To 0)
+            If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, funcN, itemName & " - Scalar is empty. Returning empty array (1 To 0).")
         End If
     Else ' IsArray(rawData) is True
+        If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, funcN, itemName & " - rawData is Array.")
+
+        Dim dbg_l1 As String, dbg_u1 As String, dbg_l2 As String, dbg_u2 As String
+        Dim numDimensions As Integer
+
         On Error Resume Next ' For LBound/UBound calls
-        lBound1 = LBound(rawData, 1)
-        uBound1 = UBound(rawData, 1)
+        lBound1 = LBound(rawData, 1): dbg_l1 = CStr(lBound1)
+        uBound1 = UBound(rawData, 1): dbg_u1 = CStr(uBound1)
         If Err.Number <> 0 Then
-            Call M04_LogWriter.WriteErrorLog("WARNING", moduleN, funcN, itemName & " - 配列境界取得失敗 (1次元目)。空として扱います。ErrNo:" & Err.Number)
+            dbg_l1 = "Err:" & Err.Description: dbg_u1 = "Err:" & Err.Description
+            If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, funcN, itemName & " - Error getting 1st dim bounds: " & Err.Description)
             Err.Clear
-            ReDim tempList(1 To 0)
-            ConvertRawVariantToStringArray = tempList
-            Exit Function
+            GoTo InvalidArrayStructure_CVTSA ' Simplified GoTo for common error exit
         End If
 
-        lBound2 = LBound(rawData, 2)
-        uBound2 = UBound(rawData, 2)
-        If Err.Number <> 0 Then
+        lBound2 = LBound(rawData, 2): dbg_l2 = CStr(lBound2) ' Attempt to get 2nd dimension
+        uBound2 = UBound(rawData, 2): dbg_u2 = CStr(uBound2)
+        If Err.Number = 0 Then
+            numDimensions = 2
+            If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, funcN, itemName & " - Detected 2D Array. Bounds1: " & dbg_l1 & " To " & dbg_u1 & ". Bounds2: " & dbg_l2 & " To " & dbg_u2)
+        Else
+            numDimensions = 1
             Err.Clear
-            On Error GoTo 0
+            If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, funcN, itemName & " - Detected 1D Array. Bounds: " & dbg_l1 & " To " & dbg_u1)
+        End If
+        On Error GoTo ErrorHandler_CVTSA ' Restore specific error handler for this function
+
+        If numDimensions = 1 Then
             If uBound1 >= lBound1 Then
                 ReDim tempList(1 To uBound1 - lBound1 + 1)
                 count = 0
+                If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, funcN, itemName & " - 1D Loop: " & lBound1 & " To " & uBound1 & ". tempList ReDim'd to (1 To " & UBound(tempList) & ")")
                 For i = lBound1 To uBound1
+                    If currentConfig.DebugDetailLevel2Enabled Then tempMsg = itemName & " - 1D Loop i=" & i & ", rawData(i)='" & CStr(rawData(i)) & "'"
                     If Not IsEmpty(rawData(i)) And Trim(CStr(rawData(i))) <> "" Then
                         count = count + 1
                         tempList(count) = Trim(CStr(rawData(i)))
+                        If currentConfig.DebugDetailLevel2Enabled Then tempMsg = tempMsg & " -> Added to tempList(" & count & ")"
+                    Else
+                        If currentConfig.DebugDetailLevel2Enabled Then tempMsg = tempMsg & " -> Skipped (empty)"
                     End If
+                    If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, funcN, tempMsg)
                 Next i
                 If count > 0 Then
-                    If count < UBound(tempList, 1) Then ReDim Preserve tempList(1 To count)
+                    If count < UBound(tempList) Then ReDim Preserve tempList(1 To count)
+                    If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, funcN, itemName & " - 1D Loop END. Final count: " & count & ". tempList ReDim Preserve'd to (1 To " & UBound(tempList) & ")")
                 Else
                     ReDim tempList(1 To 0)
+                    If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, funcN, itemName & " - 1D Loop END. No non-empty items. tempList ReDim'd to (1 To 0)")
                 End If
-            Else
+            Else ' Array like (1 To 0)
                 ReDim tempList(1 To 0)
+                If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, funcN, itemName & " - 1D Array is empty (e.g., 1 To 0). tempList ReDim'd to (1 To 0)")
             End If
-        Else
-            On Error GoTo 0
-            If uBound1 >= lBound1 And uBound2 >= lBound2 Then
-                If lBound2 = 1 And uBound2 = 1 Then
-                    ReDim tempList(1 To uBound1 - lBound1 + 1)
-                    count = 0
-                    For r = lBound1 To uBound1
-                        If Not IsEmpty(rawData(r, lBound2)) And Trim(CStr(rawData(r, lBound2))) <> "" Then
-                            count = count + 1
-                            tempList(count) = Trim(CStr(rawData(r, lBound2)))
-                        End If
-                    Next r
-                    If count > 0 Then
-                         If count < UBound(tempList, 1) Then ReDim Preserve tempList(1 To count)
+        ElseIf numDimensions = 2 And lBound2 = 1 And uBound2 = 1 Then ' N rows x 1 column
+            If uBound1 >= lBound1 Then
+                ReDim tempList(1 To uBound1 - lBound1 + 1)
+                count = 0
+                If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, funcName, itemName & " - 2D-Vertical Loop: " & lBound1 & " To " & uBound1 & ". tempList ReDim'd to (1 To " & UBound(tempList) & ")")
+                For r = lBound1 To uBound1
+                    If currentConfig.DebugDetailLevel2Enabled Then tempMsg = itemName & " - 2D Loop r=" & r & ", rawData(r,1)='" & CStr(rawData(r, lBound2)) & "'"
+                    If Not IsEmpty(rawData(r, lBound2)) And Trim(CStr(rawData(r, lBound2))) <> "" Then
+                        count = count + 1
+                        tempList(count) = Trim(CStr(rawData(r, lBound2)))
+                        If currentConfig.DebugDetailLevel2Enabled Then tempMsg = tempMsg & " -> Added to tempList(" & count & ")"
                     Else
-                        ReDim tempList(1 To 0)
+                        If currentConfig.DebugDetailLevel2Enabled Then tempMsg = tempMsg & " -> Skipped (empty)"
                     End If
+                    If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, funcName, tempMsg)
+                Next r
+                If count > 0 Then
+                    If count < UBound(tempList) Then ReDim Preserve tempList(1 To count)
+                    If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, funcName, itemName & " - 2D Loop END. Final count: " & count & ". tempList ReDim Preserve'd to (1 To " & UBound(tempList) & ")")
                 Else
-                    Call M04_LogWriter.WriteErrorLog("WARNING", moduleN, funcN, itemName & " - 予期しない2D配列構造 (複数列)。リストは空になります。")
                     ReDim tempList(1 To 0)
+                    If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, funcName, itemName & " - 2D Loop END. No non-empty items. tempList ReDim'd to (1 To 0)")
                 End If
-            Else
+            Else ' Array like (1 To 0, 1 To 1)
                 ReDim tempList(1 To 0)
+                If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, funcName, itemName & " - 2D-Vertical Array is empty (e.g., 1 To 0 for rows). tempList ReDim'd to (1 To 0)")
             End If
+        Else ' Not 1D and Not 2D-Vertical
+InvalidArrayStructure_CVTSA:
+            If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("WARNING_L2", moduleN, funcN, itemName & " - 予期しない配列構造または空の配列。L1:" & dbg_l1 & ", U1:" & dbg_u1 & ", L2:" & dbg_l2 & ", U2:" & dbg_u2 & ". 空として扱います。")
+            ReDim tempList(1 To 0)
         End If
     End If
+
+    ConvertRawVariantToStringArray = tempList
+    If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, funcN, "ConvertRawVariantToStringArray END for item: '" & itemName & "'. Returning array LBound=" & LBound(tempList) & ", UBound=" & UBound(tempList))
+    Exit Function
+
+ErrorHandler_CVTSA:
+    Call M04_LogWriter.WriteErrorLog("CRITICAL_L2", moduleN, funcN, itemName & " の変換中に予期せぬエラー。", Err.Number, Err.Description)
+    ReDim tempList(1 To 0)
     ConvertRawVariantToStringArray = tempList
 End Function
 
@@ -634,7 +681,7 @@ Public Function General_IsArrayInitialized(arr As Variant) As Boolean
 
 End Function
 
-Private Sub LogErrorAndSetOccurredFlag(ByVal moduleN As String, ByVal callerProcName As String, ByVal failedSubName As String, ByVal errNum As Long, ByVal errDesc As String)
+Private Sub M02Reader_LogAndSetError(ByVal moduleN As String, ByVal callerProcName As String, ByVal failedSubName As String, ByVal errNum As Long, ByVal errDesc As String)
     ' This sub is called when a Load... sub finishes and Err.Number is not 0,
     ' meaning an error occurred in the sub and was not handled by Resume Next or Exit Sub within it.
     m_errorOccurred = True ' Set the module-level flag
