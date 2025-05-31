@@ -207,20 +207,11 @@ Private Sub InitializeConfigStructure(ByRef config As tConfigSettings)
     Erase config.FilePatternIdentifiers
 
     ' F. Extraction Data Offset Definition
-    Erase config.OffsetItemNames
-    Erase config.OffsetValuesRaw
-    Erase config.Offsets
-    config.IsOffsetKoubanOriginallyEmpty = True
-    config.IsOffsetHensendenjoOriginallyEmpty = True
-    config.IsOffsetSagyomei1OriginallyEmpty = True
-    config.IsOffsetSagyomei2OriginallyEmpty = True
-    config.IsOffsetTantouOriginallyEmpty = True
-    config.IsOffsetKoujiShuruiOriginallyEmpty = True
-    config.IsOffsetNinzuOriginallyEmpty = True
-    config.IsOffsetSagyoinOriginallyEmpty = True
-    config.IsOffsetSonotaOriginallyEmpty = True
-    config.IsOffsetShuuryoJikanOriginallyEmpty = True
-    config.IsOffsetBunrui1ExtSrcOriginallyEmpty = True
+    Erase config.OffsetItemMasterNames ' Corrected from OffsetItemNames
+    Erase config.OffsetDefinitions       ' Corrected from OffsetValuesRaw and reflects new UDT member
+    Erase config.IsOffsetOriginallyEmptyFlags ' Corrected from Offsets and reflects new UDT member
+    ' Individual IsOffset...OriginallyEmpty flags were removed from tConfigSettings,
+    ' so their initialization here is also removed.
 
     ' G. Output Sheet Settings
     config.OutputHeaderRowCount = 1
