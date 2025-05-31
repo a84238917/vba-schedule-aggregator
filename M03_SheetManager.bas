@@ -252,7 +252,12 @@ Private Sub WriteSheetHeaders(ByVal ws As Worksheet, ByVal sheetType As String, 
             ws.Range("D1").value = "プロシージャ"
             ws.Range("E1").value = "メッセージ"
         Case "Output"
-                Dim singleRowHeaders() As String
+            Dim r As Long, c As Long ' ★ Ensure this declaration is here
+            Dim singleRowHeaders() As String
+
+            ' The existing conditional structure is kept, only the Dim statement is ensured.
+            ' The prompt's target structure for If conditions is slightly different but not part of this specific fix.
+            If General_IsArrayInitialized(config.OutputHeaderContents) And config.OutputHeaderRowCount > 0 Then
                 For r = 1 To config.OutputHeaderRowCount
                     If r >= LBound(config.OutputHeaderContents) And r <= UBound(config.OutputHeaderContents) Then
                         singleRowHeaders = Split(config.OutputHeaderContents(r), vbTab) ' タブ区切りを想定
