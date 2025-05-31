@@ -742,7 +742,3 @@ Private Sub M02_LogError(ByVal moduleN As String, ByVal callerProcName As String
     Call M04_LogWriter.WriteErrorLog("ERROR", moduleN, callerProcName, failedSubName & " からエラーが伝播 (または新規発生)。", errNum, errDesc)
     ' Do not Clear Err here, let LoadConfiguration handle it or GoTo
 End Sub
-
-[end of M02_ConfigReader.bas]
-
-[end of M02_ConfigReader.bas]
