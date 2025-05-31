@@ -154,8 +154,21 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
         ReDim configStruct.IsOffsetOriginallyEmptyFlags(1 To 0)
     End If
 
+    ' Determine if F-Section was successful and set IsOffsetDefinitionsValid
+    If Not m_errorOccurred Then ' No parsing errors during F-Section
+        If actualOffsetCount > 0 Then
+            configStruct.IsOffsetDefinitionsValid = True ' Items were read and no errors
+        Else ' actualOffsetCount = 0
+            ' No items defined, but arrays are ReDim'd (1 To 0), so consider it "valid" in terms of structure
+            configStruct.IsOffsetDefinitionsValid = True
+        End If
+    Else
+        configStruct.IsOffsetDefinitionsValid = False ' Error occurred during F-Section processing
+    End If
+
 FinalConfigCheck: ' Label for potential GoTo from F-Section if error occurs
     If m_errorOccurred Then
+        configStruct.IsOffsetDefinitionsValid = False ' Ensure it's false if we jump here due to error
         LoadConfiguration = False
         Exit Function
     End If

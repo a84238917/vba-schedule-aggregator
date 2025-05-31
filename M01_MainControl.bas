@@ -210,6 +210,7 @@ Private Sub InitializeConfigStructure(ByRef config As tConfigSettings)
     Erase config.OffsetItemMasterNames ' Corrected from OffsetItemNames
     Erase config.OffsetDefinitions       ' Corrected from OffsetValuesRaw and reflects new UDT member
     Erase config.IsOffsetOriginallyEmptyFlags ' Corrected from Offsets and reflects new UDT member
+    config.IsOffsetDefinitionsValid = False ' ★追加
     ' Individual IsOffset...OriginallyEmpty flags were removed from tConfigSettings,
     ' so their initialization here is also removed.
 

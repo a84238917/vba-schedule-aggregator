@@ -91,6 +91,7 @@ Public Type tConfigSettings
     OffsetItemMasterNames() As String      ' Config N列のオフセット項目名リスト(F-1)
     OffsetDefinitions() As tOffset         ' Config O列のパースされたオフセット定義
     IsOffsetOriginallyEmptyFlags() As Boolean ' Config O列が元々空だったかのフラグ
+    IsOffsetDefinitionsValid As Boolean    ' ★追加: OffsetDefinitionsが有効かを示すフラグ
 
     ' G. Output Sheet Settings
     OutputHeaderRowCount As Long    ' O811 出力シートヘッダー行数

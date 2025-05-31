@@ -87,51 +87,37 @@ Public Function ExtractDataFromFile(ByVal targetFilePath As String, ByRef config
                              yearVal & "年" & monthVal & "月" & dayValAsLong & "日" & " | " & _
                              "工程" & procLoopIndex & ":"
 
-                If General_IsArrayInitialized(config.OffsetItemMasterNames) And IsArray(config.OffsetDefinitions) Then
-                    Dim definitionsInitializedAndNotEmpty As Boolean
-                    definitionsInitializedAndNotEmpty = False
-                    On Error Resume Next ' UBound/LBoundがエラーになる可能性を考慮
-                    If UBound(config.OffsetDefinitions) >= LBound(config.OffsetDefinitions) Then
-                        ' 要素が1つ以上存在する (例: arr(1 To 5))
-                        definitionsInitializedAndNotEmpty = True
-                    ElseIf LBound(config.OffsetDefinitions) > UBound(config.OffsetDefinitions) Then
-                        ' ReDim Preserve arr(1 To 0) のような空の配列だがReDimはされている状態
-                        ' このケースも配列としては「使える状態」とみなし、後続のUBound/LBound比較で整合性をチェックする
-                        definitionsInitializedAndNotEmpty = True
-                    End If
-                    On Error GoTo 0
+                If General_IsArrayInitialized(config.OffsetItemMasterNames) And config.IsOffsetDefinitionsValid Then
+                    ' OffsetDefinitions is considered valid by the flag set in M02_ConfigReader
+                    ' Now, directly compare bounds, assuming OffsetDefinitions is safe to access for UBound/LBound
+                    ' It's crucial that M02_ConfigReader correctly ReDim'd OffsetDefinitions (e.g., 1 To 0 if empty)
+                    If UBound(config.OffsetItemMasterNames) = UBound(config.OffsetDefinitions) And _
+                       LBound(config.OffsetItemMasterNames) = LBound(config.OffsetDefinitions) Then
+                        For i = LBound(config.OffsetItemMasterNames) To UBound(config.OffsetItemMasterNames)
+                            Dim currentItemName As String
+                            Dim currentOffset As tOffset
+                            currentItemName = config.OffsetItemMasterNames(i)
+                            currentOffset = config.OffsetDefinitions(i)
 
-                    If definitionsInitializedAndNotEmpty Then
-                        If UBound(config.OffsetItemMasterNames) = UBound(config.OffsetDefinitions) And _
-                           LBound(config.OffsetItemMasterNames) = LBound(config.OffsetDefinitions) Then
-                            For i = LBound(config.OffsetItemMasterNames) To UBound(config.OffsetItemMasterNames)
-                                Dim currentItemName As String
-                                Dim currentOffset As tOffset
-                                currentItemName = config.OffsetItemMasterNames(i)
-                                currentOffset = config.OffsetDefinitions(i)
+                            ' データ読み取り位置計算 (v0.1 シンプル版)
+                            ' プロセスごとの列オフセットはCurrentPatternIdentifierとProcessPatternColNumbersから取得する想定だがv0.1では未実装
+                            ' ここではdayLoopIndexとprocLoopIndexに基づく行オフセットと、config.Offsetsの列オフセットのみ考慮
+                            dataRow = config.HeaderRowCount + ((dayLoopIndex - 1) * config.RowsPerDay) + config.DayRowOffset + currentOffset.Row
+                                      '+ procLoopIndex -1 ; Process毎のベース行が異なる場合、この行調整も必要
+                            dataCol = Columns(config.DayColumnLetter).Column + currentOffset.Col ' 日付列を基準とした列オフセット
 
-                                ' データ読み取り位置計算 (v0.1 シンプル版)
-                                ' プロセスごとの列オフセットはCurrentPatternIdentifierとProcessPatternColNumbersから取得する想定だがv0.1では未実装
-                                ' ここではdayLoopIndexとprocLoopIndexに基づく行オフセットと、config.Offsetsの列オフセットのみ考慮
-                                dataRow = config.HeaderRowCount + ((dayLoopIndex - 1) * config.RowsPerDay) + config.DayRowOffset + currentOffset.Row
-                                          '+ procLoopIndex -1 ; Process毎のベース行が異なる場合、この行調整も必要
-                                dataCol = Columns(config.DayColumnLetter).Column + currentOffset.Col ' 日付列を基準とした列オフセット
-
-                                If dataRow > 0 And dataCol > 0 And dataRow <= wsTarget.Rows.Count And dataCol <= wsTarget.Columns.Count Then
-                                    extractedValue = Trim(CStr(wsTarget.Cells(dataRow, dataCol).Value))
-                                    outputLine = outputLine & " [" & currentItemName & " (" & currentOffset.Row & "," & currentOffset.Col & "): '" & extractedValue & "']"
-                                Else
-                                    outputLine = outputLine & " [" & currentItemName & " (" & currentOffset.Row & "," & currentOffset.Col & "): (範囲外 R:" & dataRow & ",C:" & dataCol & ")]"
-                                End If
-                            Next i
-                        Else
-                            outputLine = outputLine & " [エラー: オフセット定義の配列数/範囲が不一致です (MasterNames vs Definitions)]"
-                        End If
+                            If dataRow > 0 And dataCol > 0 And dataRow <= wsTarget.Rows.Count And dataCol <= wsTarget.Columns.Count Then
+                                extractedValue = Trim(CStr(wsTarget.Cells(dataRow, dataCol).Value))
+                                outputLine = outputLine & " [" & currentItemName & " (" & currentOffset.Row & "," & currentOffset.Col & "): '" & extractedValue & "']"
+                            Else
+                                outputLine = outputLine & " [" & currentItemName & " (" & currentOffset.Row & "," & currentOffset.Col & "): (範囲外 R:" & dataRow & ",C:" & dataCol & ")]"
+                            End If
+                        Next i
                     Else
-                         outputLine = outputLine & " [エラー: OffsetDefinitions 配列が正しく初期化されていないか、要素がありません]"
+                        outputLine = outputLine & " [エラー: オフセット定義の配列数/範囲が不一致です (MasterNames vs Definitions)]"
                     End If
                 Else
-                    outputLine = outputLine & " [エラー: OffsetItemMasterNames または OffsetDefinitions が配列として初期化されていません]"
+                    outputLine = outputLine & " [エラー: OffsetItemMasterNames が初期化されていないか、OffsetDefinitions が無効とマークされています]"
                 End If
                 Debug.Print outputLine
             Next procLoopIndex
