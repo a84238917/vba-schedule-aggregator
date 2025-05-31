@@ -1,4 +1,4 @@
-' バージョン：v0.5.0
+' バージョン：v0.5.1
 Option Explicit
 ' このモジュールは、プロジェクト全体で共有されるグローバル定数、Publicなユーザー定義型、およびPublicなグローバル変数を一元的に宣言・管理します。
 
@@ -8,7 +8,11 @@ Public Const DEBUG_MODE_WARNING As Boolean = False ' 警告レベルのデバッ
 ' Public Const DEBUG_MODE_DETAIL As Boolean = False  ' 詳細な処理追跡情報を出力するかどうか (g_configSettings.TraceDebugEnabled に置き換え)
 
 ' Fixed Setting Value Constant
-Public Const CONFIG_SHEET_DEFAULT_NAME As String = "Config (2)" ' 設定シートのデフォルト名
+Public Const CONFIG_SHEET_DEFAULT_NAME As String = "Config" ' 設定シートのデフォルト名
+
+' 作業員ヘッダー判定用デフォルト値
+Public Const DEFAULT_WORKER_HEADER_PREFIX As String = "作業員"
+Public Const DEFAULT_WORKER_HEADER_PREFIX_LENGTH As Long = 3
 
 ' User-Defined Type: tOffset
 Public Type tOffset
@@ -27,6 +31,8 @@ Public Type tConfigSettings
     ' A. General Settings
     DebugModeFlag As Boolean              ' O3 デバッグモードフラグ
     TraceDebugEnabled As Boolean          ' O4 詳細トレースデバッグ有効フラグ (旧DEBUG_MODE_DETAIL)
+    EnableSheetLogging As Boolean   ' O5 汎用ログシートへの出力有効フラグ
+    LogSheetName As String          ' O42 汎用ログシート名
     DefaultFolderPath As String           ' O12 デフォルトフォルダパス
     OutputSheetName As String             ' O43 抽出結果出力シート名
     SearchConditionLogSheetName As String ' O44 検索条件ログシート名
@@ -60,6 +66,7 @@ Public Type tConfigSettings
     ProcessPatternColNumbers() As Variant    ' C-9から派生 現在のシートに対応する工程列数
 
     ' D. Filter Conditions
+    ExtractIfWorkersEmpty As Boolean      ' O241 作業員が空でも他項目に値があれば抽出フラグ
     WorkerFilterLogic As String         ' O242 作業員フィルター検索論理
     WorkerFilterList() As String        ' O243-O262 作業員フィルターリスト
     Kankatsu1FilterList() As String     ' O275-O294 管内1フィルターリスト
@@ -81,34 +88,9 @@ Public Type tConfigSettings
     FilePatternIdentifiers() As String ' Q557-Q756 各処理対象ファイル適用工程パターン識別子
 
     ' F. Extraction Data Offset Definition
-    ' F.1. Specific Offset Members (11 items)
-    OffsetKouban As tOffset                 ' 工番オフセット
-    IsOffsetKoubanOriginallyEmpty As Boolean
-    OffsetHensendenjo As tOffset            ' 変電所オフセット
-    IsOffsetHensendenjoOriginallyEmpty As Boolean
-    OffsetSagyomei1 As tOffset              ' 作業名1オフセット
-    IsOffsetSagyomei1OriginallyEmpty As Boolean
-    OffsetSagyomei2 As tOffset              ' 作業名2オフセット
-    IsOffsetSagyomei2OriginallyEmpty As Boolean
-    OffsetTantou As tOffset                 ' 担当の名前オフセット
-    IsOffsetTantouOriginallyEmpty As Boolean
-    OffsetKoujiShurui As tOffset            ' 工事種類オフセット
-    IsOffsetKoujiShuruiOriginallyEmpty As Boolean
-    OffsetNinzu As tOffset                  ' 人数オフセット
-    IsOffsetNinzuOriginallyEmpty As Boolean
-    OffsetSagyoinStart As tOffset           ' 作業員開始オフセット (ここから複数名取得)
-    IsOffsetSagyoinStartOriginallyEmpty As Boolean
-    OffsetSonota As tOffset                 ' 旧その他オフセット
-    IsOffsetSonotaOriginallyEmpty As Boolean
-    OffsetShuuryoJikan As tOffset           ' 終了時間オフセット
-    IsOffsetShuuryoJikanOriginallyEmpty As Boolean
-    OffsetBunrui1ExtSrc As tOffset          ' 分類1抽出元オフセット
-    IsOffsetBunrui1ExtSrcOriginallyEmpty As Boolean
-    
-    ' F.2. Generic Offset arrays (no longer primary, but kept for potential future use or reference)
-    OffsetItemNames() As String             ' N778-N792 オフセット項目名リスト (Config読込時の一時利用)
-    OffsetValuesRaw() As String             ' O778-O792 オフセット値リスト (Raw "row,col" strings, Config読込時の一時利用)
-    ' Offsets() As tOffset                  ' F-2 オフセット値 (パース後) - これは廃止され、上記の個別メンバーに置き換えられました
+    OffsetItemMasterNames() As String      ' Config N列のオフセット項目名リスト(F-1)
+    OffsetDefinitions() As tOffset         ' Config O列のパースされたオフセット定義
+    IsOffsetOriginallyEmptyFlags() As Boolean ' Config O列が元々空だったかのフラグ
 
     ' G. Output Sheet Settings
     OutputHeaderRowCount As Long    ' O811 出力シートヘッダー行数
@@ -122,6 +104,7 @@ Public Type tConfigSettings
     ScriptFullName As String        ' マクロファイルのフルパス
     WorkSheetName As String         ' Workシート名 (固定値または設定による)
     ConfigSheetFullName As String   ' Configシートのフルネーム (Workbook名を含む)
+    MainWorkbookObject As Workbook  ' マクロ本体のWorkbookオブジェクト参照 (M01で設定)
 End Type
 
 ' Global Variables
