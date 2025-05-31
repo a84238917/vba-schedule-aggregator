@@ -44,7 +44,9 @@ Public Sub ExtractDataMain()
     ' This call must ensure g_errorLogWorksheet is set, even if M04_LogWriter is used internally by M03
     Call M03_SheetManager.PrepareErrorLogSheet(g_configSettings, ThisWorkbook)
     If g_errorLogWorksheet Is Nothing Then
-        MsgBox "エラーログシートの準備に失敗しました。詳細はDebug.Print出力を確認してください。処理を中断します。", vbCritical, "致命的エラー"
+        MsgBox "エラーログシートの準備に失敗しました。指定されたシート名: 「" & tempErrorLogSheetName & "」。" & vbCrLf & _
+               "シート名に不正な文字がないか、ブックやシートが保護されていないか等を確認してください。" & vbCrLf & _
+               "詳細はVBEのイミディエイトウィンドウの出力を確認してください。処理を中断します。", vbCritical, "致命的エラー"
         GoTo FinalizeRoutine_ExtractDataMain
     End If
     Call M04_LogWriter.WriteErrorLog("INFORMATION", "MainControl", "ExtractDataMain", "エラーログシート準備完了。")

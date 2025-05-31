@@ -11,7 +11,7 @@ Public Sub PrepareErrorLogSheet(ByRef config As tConfigSettings, ByVal wb As Wor
     Dim funcName As String: funcName = "PrepareErrorLogSheet"
     Dim wasCreated As Boolean
 
-    If Not config.EnableErrorLogSheetOutput Then ' ★追加
+    If Not config.EnableErrorLogSheetOutput Then
         Set g_errorLogWorksheet = Nothing
         g_nextErrorLogRow = 1 ' Reset anyway
         Exit Sub
@@ -20,42 +20,39 @@ Public Sub PrepareErrorLogSheet(ByRef config As tConfigSettings, ByVal wb As Wor
     On Error GoTo ErrorHandler_PrepareErrorLogSheet
 
     If Trim(config.ErrorLogSheetName) = "" Then
-        Debug.Print Now & " CRITICAL: " & MODULE_NAME & "." & funcName & " - ErrorLogSheetName is empty in config."
-        Set g_errorLogWorksheet = Nothing ' Explicitly set to Nothing
+        Debug.Print Now & " CRITICAL: " & MODULE_NAME & "." & funcName & " - ErrorLogSheetName (Config O45) is empty."
+        Set g_errorLogWorksheet = Nothing
         Exit Sub
     End If
 
     Set g_errorLogWorksheet = EnsureSheetExists(config.ErrorLogSheetName, wb, wasCreated)
 
     If g_errorLogWorksheet Is Nothing Then
-        ' EnsureSheetExists logs its own errors, but we add a specific one here if critical
-        Debug.Print Now & " CRITICAL: " & MODULE_NAME & "." & funcName & " - EnsureSheetExists failed to return a sheet for ErrorLog: " & config.ErrorLogSheetName
+        Debug.Print Now & " CRITICAL: " & MODULE_NAME & "." & funcName & " - ErrorLogシート「" & config.ErrorLogSheetName & "」の準備(EnsureSheetExists呼び出し)に失敗しました。EnsureSheetExists内のDebug.Printも確認してください。"
         Exit Sub
     End If
 
-    ' ヘッダー書き込み条件: 新規作成された、または1行目が完全に空
     Dim firstCellEmpty As Boolean
-    On Error Resume Next ' Avoid error if sheet is protected, etc.
-    firstCellEmpty = IsEmpty(g_errorLogWorksheet.Cells(1, 1).Value)
+    On Error Resume Next
+    firstCellEmpty = IsEmpty(g_errorLogWorksheet.Cells(1, 1).value)
     On Error GoTo ErrorHandler_PrepareErrorLogSheet
 
     If wasCreated Or firstCellEmpty Then
         Call WriteSheetHeaders(g_errorLogWorksheet, "ErrorLog", config)
     End If
 
-    ' Initialize g_nextErrorLogRow
     If Application.WorksheetFunction.CountA(g_errorLogWorksheet.Rows(1)) = 0 Then
          g_nextErrorLogRow = 1
     Else
          g_nextErrorLogRow = g_errorLogWorksheet.Cells(Rows.Count, "A").End(xlUp).Row + 1
     End If
-    If g_nextErrorLogRow <= 0 Then g_nextErrorLogRow = 1 ' Final fallback
+    If g_nextErrorLogRow <= 0 Then g_nextErrorLogRow = 1
 
     Exit Sub
 
 ErrorHandler_PrepareErrorLogSheet:
-    Debug.Print Now & " CRITICAL ERROR in " & MODULE_NAME & "." & funcName & ": Err# " & Err.Number & " - " & Err.Description
-    Set g_errorLogWorksheet = Nothing ' Ensure it's nothing if an error occurs
+    Debug.Print Now & " CRITICAL ERROR in " & MODULE_NAME & "." & funcName & " (シート名: " & config.ErrorLogSheetName & "): Err# " & Err.Number & " - " & Err.Description
+    Set g_errorLogWorksheet = Nothing
 End Sub
 
 ' Public Sub: PrepareRemainingLogSheets
