@@ -480,40 +480,112 @@ Private Function ReadBoolCell(ws As Worksheet, addr As String, moduleN As String
 End Function
 
 Private Function ReadRangeToArray(ws As Worksheet, rangeAddress As String, moduleN As String, funcN As String, itemName As String) As String()
-    Dim data As Variant, result() As String, arrRead_i As Long, nonEmptyCount As Long
-    On Error Resume Next
-    data = ws.Range(rangeAddress).value
-    If Err.Number <> 0 Then
-        Call M04_LogWriter.WriteErrorLog("WARNING", moduleN, funcN, itemName & " (" & rangeAddress & ") 範囲読み取り失敗。", Err.Number, Err.Description)
-        ReDim result(1 To 0) ' Return initialized empty array on range read error
-        ReadRangeToArray = result
-        Exit Function
-    End If
-    On Error GoTo 0
+    Dim data As Variant
+    Dim result() As String
+    Dim r As Long ' Loop counter for rows
+    Dim numRowsOrElements As Long
+    Dim nonEmptyCount As Long
+    nonEmptyCount = 0
 
-    If IsArray(data) Then
-        ' Existing logic for array data
-        ReDim result(1 To UBound(data, 1))
-        For arrRead_i = 1 To UBound(data, 1)
-            If Not IsEmpty(data(arrRead_i, 1)) And Trim(CStr(data(arrRead_i, 1))) <> "" Then
-                result(arrRead_i) = Trim(CStr(data(arrRead_i, 1)))
-                nonEmptyCount = nonEmptyCount + 1
-            Else
-                result(arrRead_i) = vbNullString ' Store as empty string for consistency
-            End If
-        Next arrRead_i
-        If nonEmptyCount = 0 Then
-            ReDim result(1 To 0) ' All elements were empty or array was empty, return (1 To 0)
-        End If
-    Else
-        ' Data is not an array (e.g., single cell, possibly empty)
+    On Error GoTo ReadRangeErrorHandler
+
+    ' 1. Read data from range
+    data = ws.Range(rangeAddress).value
+
+    ' 2. Process data based on its type (scalar, 1D array, 2D array)
+    If Not IsArray(data) Then
+        ' Data is a single value (scalar)
         If Not IsEmpty(data) And Trim(CStr(data)) <> "" Then
             ReDim result(1 To 1)
             result(1) = Trim(CStr(data))
+            nonEmptyCount = 1
         Else
-            ReDim result(1 To 0) ' Single cell empty or IsEmpty, return (1 To 0)
+            ' Single cell is empty or only whitespace
+            ReDim result(1 To 0)
+        End If
+    Else
+        ' Data is an array. Determine dimensions.
+        Dim numDimensions As Integer
+        Dim is1DArray As Boolean: is1DArray = False
+        Dim is2DVerticalArray As Boolean: is2DVerticalArray = False
+
+        Dim lBound1 As Long, uBound1 As Long
+        Dim lBound2 As Long, uBound2 As Long ' Only for 2D
+
+        On Error Resume Next ' To determine dimensions safely
+        lBound1 = LBound(data, 1)
+        uBound1 = UBound(data, 1)
+        If Err.Number <> 0 Then GoTo InvalidArrayStructure ' Failed to get even 1st dimension bounds
+
+        lBound2 = LBound(data, 2)
+        uBound2 = UBound(data, 2)
+        If Err.Number = 0 Then
+            numDimensions = 2
+            If lBound2 = 1 And uBound2 = 1 Then
+                is2DVerticalArray = True ' Standard N rows x 1 col array from vertical range
+            End If
+            ' If lBound2 > uBound2 (e.g. (1 to 0, 1 to 1)) this is also an empty representation
+            ' but is2DVerticalArray would be false.
+        Else
+            numDimensions = 1
+            is1DArray = True
+            Err.Clear ' Clear the error from failing to get 2nd dimension
+        End If
+        On Error GoTo ReadRangeErrorHandler ' Restore original error handler for subsequent operations
+
+        If is1DArray Then
+            numRowsOrElements = uBound1 - lBound1 + 1
+            If numRowsOrElements > 0 Then
+                ReDim result(lBound1 To uBound1) ' Preserve original 1D bounds
+                For r = lBound1 To uBound1
+                    If Not IsEmpty(data(r)) And Trim(CStr(data(r))) <> "" Then
+                        result(r) = Trim(CStr(data(r)))
+                        nonEmptyCount = nonEmptyCount + 1
+                    Else
+                        result(r) = vbNullString
+                    End If
+                Next r
+            Else
+                 ReDim result(1 To 0) ' e.g. LBound=1, UBound=0
+            End If
+        ElseIf is2DVerticalArray Then ' 2D array that is N rows x 1 column
+            numRowsOrElements = uBound1 - lBound1 + 1
+            If numRowsOrElements > 0 Then
+                ReDim result(1 To numRowsOrElements) ' Convert to 1D array
+                Dim resultIdx As Long: resultIdx = 1
+                For r = lBound1 To uBound1
+                    If Not IsEmpty(data(r, lBound2)) And Trim(CStr(data(r, lBound2))) <> "" Then ' Use lBound2 for column index
+                        result(resultIdx) = Trim(CStr(data(r, lBound2)))
+                        nonEmptyCount = nonEmptyCount + 1
+                    Else
+                        result(resultIdx) = vbNullString
+                    End If
+                    resultIdx = resultIdx + 1
+                Next r
+            Else
+                ReDim result(1 To 0) ' e.g. LBound1=1, UBound1=0 for rows
+            End If
+        Else ' Array is 2D but not a single column, or some other unexpected array structure
+InvalidArrayStructure:
+            Call M04_LogWriter.WriteErrorLog("WARNING", moduleN, funcN, itemName & " (" & rangeAddress & ") は予期しない配列構造または空の配列です。空として扱います。ErrNo:" & Err.Number)
+            Err.Clear
+            ReDim result(1 To 0)
+        End If
+
+        If nonEmptyCount = 0 And numRowsOrElements > 0 Then ' Array had elements, but all were empty strings
+            ReDim result(1 To 0)
+        ElseIf numRowsOrElements <= 0 And Not (LBound(result) = 1 And UBound(result) = 0) Then
+             ' This case handles if result wasn't already set to (1 To 0) for an empty source array.
+             ReDim result(1 To 0)
         End If
     End If
+
+    ReadRangeToArray = result
+    Exit Function
+
+ReadRangeErrorHandler:
+    Call M04_LogWriter.WriteErrorLog("CRITICAL_ERROR", moduleN, funcN, itemName & " (" & rangeAddress & ") の処理中に予期せぬエラー。", Err.Number, Err.Description)
+    ReDim result(1 To 0) ' Ensure it returns an initialized empty array on any severe error
     ReadRangeToArray = result
 End Function
 
