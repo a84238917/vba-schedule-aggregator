@@ -655,27 +655,6 @@ InvalidArrayStructure_CVTSA:
 
     ConvertRawVariantToStringArray = tempList ' Assign the result first
 
-    If currentConfig.DebugDetailLevel2Enabled Then
-        Dim l_temp As String, u_temp As String
-        On Error Resume Next ' Protect LBound/UBound for logging just in case tempList is weird despite prior ReDims
-        l_temp = CStr(LBound(tempList))
-        u_temp = CStr(UBound(tempList))
-        If Err.Number <> 0 Then
-            l_temp = "Err"
-            u_temp = "Err"
-            Err.Clear
-        End If
-        On Error GoTo ErrorHandler_CVTSA ' Restore error handler for the main function
-
-        ' Now protect the WriteErrorLog call itself
-        On Error Resume Next
-        Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, "ConvertRawVariantToStringArray END for item: '" & itemName & "' (called by " & funcN_from_caller & "). Returning array LBound=" & l_temp & ", UBound=" & u_temp)
-        If Err.Number <> 0 Then
-            Debug.Print Now & " CRITICAL: Error occurred *during* final WriteErrorLog in ConvertRawVariantToStringArray for " & itemName & ". Error: " & Err.Description
-            Err.Clear
-        End If
-        On Error GoTo ErrorHandler_CVTSA ' Restore intended error handler
-    End If
     Exit Function
 
 ErrorHandler_CVTSA:

@@ -11,6 +11,10 @@ Public Sub WriteErrorLog(ByVal errorLevel As String, ByVal moduleN As String, By
                          ByVal message As String, Optional errNumber As Long = 0, Optional errDescription As String = "")
     Dim funcName_Internal As String: funcName_Internal = "WriteErrorLog_Internal" ' Use a different name to avoid confusion if procedureN is "WriteErrorLog"
 
+    If g_configSettings.DebugDetailLevel1Enabled Then
+        Debug.Print Now & " WriteErrorLog CALLED: Level=" & errorLevel & ", Mod=" & moduleN & ", Proc=" & procedureN & ", Msg=" & message & ", Err#=" & errNumber & ", ErrDesc=" & errDescription
+    End If
+
     On Error GoTo ErrorHandler_WriteErrorLog ' Internal error handler for WriteErrorLog
 
     If g_errorLogWorksheet Is Nothing Then
@@ -35,6 +39,10 @@ Public Sub WriteErrorLog(ByVal errorLevel As String, ByVal moduleN As String, By
         Debug.Print "  > Original Log: Level=" & errorLevel & ", Mod=" & moduleN & ", Proc=" & procedureN & ", Msg=" & message
         ' Optionally, could try to write to row 1: g_nextErrorLogRow = 1
         Exit Sub
+    End If
+
+    If g_configSettings.DebugDetailLevel1Enabled Then
+        Debug.Print Now & " WriteErrorLog: Writing to Sheet '" & g_errorLogWorksheet.Name & "', Row: " & g_nextErrorLogRow
     End If
 
     With g_errorLogWorksheet
@@ -174,7 +182,7 @@ Public Sub WriteOperationLog(ByRef config As tConfigSettings, ByVal wb As Workbo
     Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "マクロファイル", config.ScriptFullName)
     Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "設定ファイルシート", config.ConfigSheetFullName)
     Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "デバッグモードフラグ(O3)", CStr(config.DebugModeFlag))
-    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "詳細トレースデバッグ(O4)", CStr(config.TraceDebugEnabled))
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "デバッグ詳細出力レベル1(O4)", CStr(config.DebugDetailLevel1Enabled))
     Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "--- マクロ基本情報 ---", "終了")
 
     Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "--- A. 一般設定 (抜粋) ---", "開始")
