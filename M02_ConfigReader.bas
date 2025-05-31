@@ -615,3 +615,11 @@ Public Function General_IsArrayInitialized(arr As Variant) As Boolean
     General_IsArrayInitialized = True
 
 End Function
+
+Private Sub LogErrorAndSetOccurredFlag(ByVal moduleN As String, ByVal callerProcName As String, ByVal failedSubName As String, ByVal errNum As Long, ByVal errDesc As String)
+    ' This sub is called when a Load... sub finishes and Err.Number is not 0,
+    ' meaning an error occurred in the sub and was not handled by Resume Next or Exit Sub within it.
+    m_errorOccurred = True ' Set the module-level flag
+    Call M04_LogWriter.WriteErrorLog("ERROR", moduleN, callerProcName, failedSubName & " からエラーが伝播 (または新規発生)。", errNum, errDesc)
+    ' Do not Clear Err here, let LoadConfiguration handle it or GoTo
+End Sub
