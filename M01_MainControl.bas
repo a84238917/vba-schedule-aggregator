@@ -1,206 +1,269 @@
-' バージョン：v0.5.0
+' バージョン：v0.5.1
 Option Explicit
-' このモジュールは、マクロ全体の実行エントリーポイントを提供し、主要な処理フェーズの呼び出しフローを定義し、基本的な初期化処理と包括的なエラーハンドリングを行います。
+' このモジュールは、マクロのメイン処理フローを制御します。
+' 設定の読み込み、対象ファイルの処理、結果の出力、エラーハンドリングなど、全体の指揮を執ります。
 
-' Main Procedure: ExtractDataMain() As Sub
+' Public Sub: ExtractDataMain
+' マクロのメイン実行プロシージャ
 Public Sub ExtractDataMain()
-    ' マクロの実行開始点です。
-    Dim wbThis As Workbook ' このマクロが記述されているワークブック
-    Dim startTime As Double ' 処理開始時刻
-    Dim endTime As Double   ' 処理終了時刻
-    ' Dim wsConfig As Worksheet ' No longer needed here, LoadConfiguration handles it.
-    Dim errNum As Long, errDesc As String, errSource As String ' Error handler variables - ensure these are at Sub level
-    Dim targetFiles As Collection
-    Dim procFile As Variant
-    Dim fileIdx As Long
-    Dim totalExtractedCount As Long ' Renamed from extractedTotal
-    Dim wsResultOutput As Worksheet ' For future output sheet, pass Nothing for now
-    Dim nextOutputRowVal As Long     ' Renamed from nextOutputRow, for PrepareOutputSheet
-    Dim errorLevelForLog As String ' For logging calls
+    Dim startTime As Date
+    startTime = Now()
 
-    On Error GoTo GlobalErrorHandler_M01
-    Application.ScreenUpdating = False
-    startTime = Timer
-    Set wbThis = ThisWorkbook
-    Set g_configSettings.MainWorkbookObject = wbThis ' マクロ本体のWorkbookオブジェクトをグローバル設定に格納
+    g_nextErrorLogRow = 1 ' エラーログの最初の書き込み行を初期化
 
-    ' Initialize the global settings structure first. This ensures it's clean.
+    On Error GoTo ErrorHandler
+
+    ' 1. 設定構造体の初期化
     Call InitializeConfigStructure(g_configSettings)
-    ' Set initial values that don't depend on the config sheet itself
-    g_configSettings.StartTime = Now()
-    g_configSettings.ScriptFullName = wbThis.FullName
+    g_configSettings.ScriptFullName = ThisWorkbook.FullName ' マクロファイルのフルパスを格納
+    g_configSettings.ConfigSheetName = CONFIG_SHEET_DEFAULT_NAME ' Configシートのデフォルト名を設定
 
-    ' --- 1. Configシート読み込みフェーズ ---
-    If Not M02_ConfigReader.LoadConfiguration(g_configSettings, wbThis, CONFIG_SHEET_DEFAULT_NAME) Then
-        Dim actualErrorLogSheetName As String
-        errorLevelForLog = "CRITICAL" ' Define error level
-
-        On Error Resume Next ' Attempt to read O45 for the error log sheet name
-        actualErrorLogSheetName = wbThis.Worksheets(CONFIG_SHEET_DEFAULT_NAME).Range("O45").Value
-        On Error GoTo GlobalErrorHandler_M01 ' Restore main error handler
-
-        If Len(Trim(CStr(actualErrorLogSheetName))) = 0 Then
-            actualErrorLogSheetName = "ErrorLog_Fallback_ConfigFail" ' Final fallback if O45 is empty/unreadable
-            If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M01_MainControl.ExtractDataMain - Could not read ErrorLogSheetName from O45. Using fallback: " & actualErrorLogSheetName
-        End If
-
-        MsgBox "Configシート「" & CONFIG_SHEET_DEFAULT_NAME & "」の読み込みに問題がありました。詳細は「" & actualErrorLogSheetName & "」シートを確認してください。処理を中断します。", vbCritical, "初期化エラー"
-        Call M04_LogWriter.SafeWriteErrorLog(errorLevelForLog, wbThis, actualErrorLogSheetName, "M01_MainControl", "ExtractDataMain", "M02_ConfigReader.LoadConfigurationがFalseを返しました", 0, "Config読み込み失敗")
-        GoTo FinalizeMacro_M01
+    ' 2. 設定の読み込み
+    ' M02_ConfigReader.LoadConfiguration は g_configSettings と ThisWorkbook を引数に取るように変更想定
+    If Not M02_ConfigReader.LoadConfiguration(g_configSettings, ThisWorkbook, g_configSettings.ConfigSheetName) Then
+        MsgBox "設定の読み込みに失敗しました。処理を中断します。", vbCritical, "設定エラー"
+        GoTo FinalizeRoutine
     End If
 
-    ' デバッグモードがONの場合、イミディエイトウィンドウに「マクロ実行開始。初期化処理・Config読み込み完了。」といったログを出力。
-    If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG: M01_MainControl.ExtractDataMain - マクロ実行開始。初期化処理・Config読み込み完了。"
+    ' MainWorkbookObjectをここで設定 (LoadConfiguration後、各種ログ記録のため)
+    ' これは LoadConfiguration 内か、直後に行うべき。ただし、LoadConfiguration が ThisWorkbook を必要とするならその前に。
+    ' グローバル変数のg_configSettings.MainWorkbookObjectはこのモジュール内で設定する方針。
+    Set g_configSettings.MainWorkbookObject = ThisWorkbook
 
-    ' Initialize Collection and related variables for file processing
-    Set targetFiles = New Collection
-    fileIdx = 0
-    totalExtractedCount = 0 ' Renamed from extractedTotal
-    Set wsResultOutput = Nothing ' Explicitly Nothing for this step
-    nextOutputRowVal = 0          ' Renamed from nextOutputRow, Explicitly 0 for this step
+    ' 3. ログシートの準備と初期ログ情報書き込み
+    ' エラーログシートはPrepareSheets内で設定される g_errorLogWorksheet を使用
+    ' M03_SheetManager.PrepareSheets は g_configSettings と ThisWorkbook を引数に取るように変更想定
+    Call M03_SheetManager.PrepareSheets(g_configSettings, ThisWorkbook)
 
-    ' --- 2. 各種シート準備フェーズ ---
-    If Not M03_SheetManager.PrepareSheets(g_configSettings, wbThis) Then
-        ' PrepareSheetsが失敗した場合でも、LoadConfigurationでErrorLogSheetNameは読み込めているはず
-        Call M04_LogWriter.SafeWriteErrorLog("CRITICAL", wbThis, g_configSettings.ErrorLogSheetName, "M01_MainControl", "ExtractDataMain", "M03_SheetManager.PrepareSheetsがFalseを返しました", 0, "ログシート準備失敗")
-        MsgBox "ログシートの準備に失敗しました。処理を中断します。", vbCritical, "初期化エラー"
-        GoTo FinalizeMacro_M01
+    ' M04_LogWriter.WriteFilterLog は g_configSettings と ThisWorkbook を引数に取るように変更想定
+    Call M04_LogWriter.WriteFilterLog(g_configSettings, ThisWorkbook)
+
+    ' 4. データ抽出処理のメインループ
+    Dim i As Long
+    Dim fileSystemObj As Object ' FileSystemObject
+    Set fileSystemObj = CreateObject("Scripting.FileSystemObject")
+    Dim targetPath As String
+    Dim currentFile As Object ' File object
+    Dim filesInFolder As Object ' Files collection
+    Dim targetPattern As String ' 各ファイル/フォルダに対応する工程パターン識別子
+
+    If Not General_IsArrayInitialized(g_configSettings.TargetFileFolderPaths) Then
+        Call M04_LogWriter.WriteErrorLog("INFORMATION", "MainControl", "ExtractDataMain", "処理対象ファイル/フォルダパスリスト(TargetFileFolderPaths)が空または未初期化です。処理をスキップします。")
+        MsgBox "処理対象のファイルまたはフォルダが設定されていません。", vbInformation, "情報"
+        GoTo FinalizeRoutine
     End If
 
-    ' --- 4. 出力シート準備フェーズ ---
-    If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M01_MainControl.ExtractDataMain - Preparing output sheet."
-    Call M03_SheetManager.PrepareOutputSheet(g_configSettings, wbThis, nextOutputRowVal) ' nextOutputRowVal gets starting row
+    For i = LBound(g_configSettings.TargetFileFolderPaths) To UBound(g_configSettings.TargetFileFolderPaths)
+        targetPath = Trim(g_configSettings.TargetFileFolderPaths(i))
 
-    On Error Resume Next ' Handle error if sheet still not found (should not happen if PrepareSheets worked)
-    Set wsResultOutput = wbThis.Worksheets(g_configSettings.OutputSheetName)
-    On Error GoTo GlobalErrorHandler_M01
-    If wsResultOutput Is Nothing Then
-        Call M04_LogWriter.SafeWriteErrorLog("FATAL", wbThis, g_configSettings.ErrorLogSheetName, "M01_MainControl", "ExtractDataMain", "出力シート「" & g_configSettings.OutputSheetName & "」の取得に失敗しました。", 0, "処理中断")
-        MsgBox "致命的エラー: 出力シート「" & g_configSettings.OutputSheetName & "」を準備できませんでした。処理を中断します。", vbCritical, "出力シートエラー"
-        GoTo FinalizeMacro_M01
-    End If
-    If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M01_MainControl.ExtractDataMain - Output sheet '" & wsResultOutput.Name & "' ready. Data will start at row " & nextOutputRowVal
-
-    ' --- 5. 検索条件ログ出力フェーズ ---
-    ' ログシートが正常に準備された後に、検索条件ログを書き込みます。
-    Call M04_LogWriter.WriteFilterLog(g_configSettings, wbThis)
-
-    ' --- 3. 処理対象ファイル特定フェーズ & 6. メインループフェーズ ---
-    If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M01_MainControl.ExtractDataMain - Starting file processing phase."
-
-    If M05_FileProcessor.GetTargetFiles(g_configSettings, wbThis, targetFiles) Then
-        If targetFiles.Count > 0 Then
-            If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG: M01_MainControl.ExtractDataMain - " & targetFiles.Count & " target file(s) identified."
-            For Each procFile In targetFiles
-                fileIdx = fileIdx + 1
-                If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG: M01_MainControl.ExtractDataMain - Processing file " & fileIdx & " of " & targetFiles.Count & ": '" & CStr(procFile) & "'"
-
-                ' M06_DataExtractor.ExtractDataFromFile呼び出し
-                ' Optional引数 wsOutput, outputNextRow, currentFileNum, totalExtractedCount を渡す
-                If M06_DataExtractor.ExtractDataFromFile(CStr(procFile), g_configSettings, wbThis, wsResultOutput, nextOutputRowVal, fileIdx, totalExtractedCount) Then
-                    If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M01_MainControl.ExtractDataMain - Successfully processed (ExtractDataFromFile returned True) for: '" & CStr(procFile) & "'"
-                Else
-                    If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M01_MainControl.ExtractDataMain - Failed to process (ExtractDataFromFile returned False) for: '" & CStr(procFile) & "'"
-                    ' エラーはM06内でSafeWriteErrorLogを使って記録されているはずなので、ここでは詳細なエラーログは不要
-                End If
-            Next procFile
-            If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG: M01_MainControl.ExtractDataMain - Finished processing all " & targetFiles.Count & " file(s)."
+        ' 対応する工程パターン識別子を取得
+        If General_IsArrayInitialized(g_configSettings.FilePatternIdentifiers) And _
+           i >= LBound(g_configSettings.FilePatternIdentifiers) And _
+           i <= UBound(g_configSettings.FilePatternIdentifiers) Then
+            targetPattern = Trim(g_configSettings.FilePatternIdentifiers(i))
         Else
-            If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG: M01_MainControl.ExtractDataMain - No target files found by GetTargetFiles."
-            MsgBox "処理対象ファイルが見つかりませんでした。ConfigシートP557の設定を確認してください。", vbInformation, "処理対象なし"
+            targetPattern = "" ' デフォルトまたはエラーケース
+            Call M04_LogWriter.WriteErrorLog("WARNING", "MainControl", "ExtractDataMain", "工程パターン識別子リスト(FilePatternIdentifiers)の要素数が不足しているか、インデックス" & i & "に対応する値がありません。デフォルトのパターンを使用します（またはエラー処理）。")
         End If
-    Else
-        If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M01_MainControl.ExtractDataMain - M05_FileProcessor.GetTargetFiles returned False. See error log for details."
-        MsgBox "処理対象ファイルの特定処理でエラーが発生しました。エラーログを確認してください。", vbExclamation, "ファイル特定エラー"
-    End If
 
-FinalizeMacro_M01:
-    On Error Resume Next ' 終了処理中のエラーは無視
-    Application.ScreenUpdating = True
-    endTime = Timer
-    ' MsgBox "処理完了 (仮) 処理時間: " & Format(endTime - startTime, "0.00") & "秒"
-    Set wbThis = Nothing
-    If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG: M01_MainControl.ExtractDataMain - マクロ実行正常終了。処理時間: " & Format(endTime - startTime, "0.00") & "秒"
+        g_configSettings.CurrentPatternIdentifier = targetPattern ' 現在処理中のファイルのパターンを設定
+
+        If targetPath = "" Then
+            Call M04_LogWriter.WriteErrorLog("WARNING", "MainControl", "ExtractDataMain", "処理対象パスが空です。スキップします。(インデックス: " & i & ")")
+            GoTo NextIteration ' ループの次の反復へ
+        End If
+
+        If fileSystemObj.FolderExists(targetPath) Then
+            Set filesInFolder = fileSystemObj.GetFolder(targetPath).Files
+            If filesInFolder.Count = 0 Then
+                Call M04_LogWriter.WriteErrorLog("INFORMATION", "MainControl", "ExtractDataMain", "対象フォルダにファイルが存在しません: " & targetPath)
+                GoTo NextIteration
+            End If
+            For Each currentFile In filesInFolder
+                If IsSupportedExcelFile(currentFile.Path, fileSystemObj) Then
+                    ' M06_DataExtractor.ExtractDataFromFile は g_configSettings と ThisWorkbook を引数に取るように変更想定
+                    Call M06_DataExtractor.ExtractDataFromFile(currentFile.Path, g_configSettings, ThisWorkbook)
+                Else
+                    Call M04_LogWriter.WriteErrorLog("INFORMATION", "MainControl", "ExtractDataMain", "サポート外のファイル形式です（フォルダ内）: " & currentFile.Path)
+                End If
+            Next currentFile
+        ElseIf fileSystemObj.FileExists(targetPath) Then
+             If IsSupportedExcelFile(targetPath, fileSystemObj) Then
+                ' M06_DataExtractor.ExtractDataFromFile は g_configSettings と ThisWorkbook を引数に取るように変更想定
+                Call M06_DataExtractor.ExtractDataFromFile(targetPath, g_configSettings, ThisWorkbook)
+            Else
+                Call M04_LogWriter.WriteErrorLog("INFORMATION", "MainControl", "ExtractDataMain", "サポート外のファイル形式です（個別ファイル）: " & targetPath)
+            End If
+        Else
+            Call M04_LogWriter.WriteErrorLog("ERROR", "MainControl", "ExtractDataMain", "指定されたパスが見つかりません: " & targetPath)
+        End If
+NextIteration:
+    Next i
+
+    ' 5. 完了処理
+    Dim endTime As Date
+    endTime = Now()
+    Dim timeTaken As String
+    timeTaken = Format(endTime - startTime, "hh:mm:ss")
+
+    Call M04_LogWriter.WriteErrorLog("INFORMATION", "MainControl", "ExtractDataMain", "マクロ処理が正常に完了しました。処理時間: " & timeTaken)
+    MsgBox "マクロ処理が完了しました。" & vbCrLf & "処理時間: " & timeTaken, vbInformation, "処理完了"
+
+FinalizeRoutine:
+    On Error Resume Next ' エラーがあっても後処理は実行
+    Set fileSystemObj = Nothing
+    Set currentFile = Nothing
+    Set filesInFolder = Nothing
+    Set g_errorLogWorksheet = Nothing
+    Set g_configSettings.MainWorkbookObject = Nothing
+    On Error GoTo 0
     Exit Sub
 
-GlobalErrorHandler_M01:
-    errNum = Err.Number
-    errDesc = Err.Description
-    errSource = Err.Source
-    If DEBUG_MODE_ERROR Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - ERROR: M01_MainControl.ExtractDataMain (GlobalErrorHandler_M01) - Error " & errNum & ": " & errDesc & " (Source: " & errSource & ")"
+ErrorHandler:
+    Dim errorMsg As String
+    Dim errModule As String
+    Dim errProc As String
 
-    ' エラー情報をログに記録
-    If g_errorLogWorksheet Is Nothing Then
-        ' g_errorLogWorksheetが未設定の場合 (PrepareSheetsより前、または失敗時) はSafeWriteErrorLogを試みる
-        Dim errorSheetNameAttempt As String
-        ' g_configSettings は UDT なので Nothing にはならない。InitializeConfigStructure で初期化される。
-        ' LoadConfiguration が成功していれば ErrorLogSheetName が入っている。
-        If Len(g_configSettings.ErrorLogSheetName) > 0 Then
-            errorSheetNameAttempt = g_configSettings.ErrorLogSheetName
-        Else
-            ' LoadConfiguration失敗時などのフォールバック
-            errorSheetNameAttempt = "エラーログ(M01グローバルエラー)"
-        End If
-        Call M04_LogWriter.SafeWriteErrorLog("ERROR", wbThis, errorSheetNameAttempt, "M01_MainControl", "ExtractDataMain (GlobalErrorHandler_M01)", "エラー発生 (エラーログシート準備前または失敗): " & errSource, errNum, errDesc)
+    errModule = "MainControl" ' 現在のモジュール名
+    ' プロシージャ名は動的に取得できないため、主要プロシージャ名を仮定
+    errProc = "ExtractDataMain (or called procedure)"
+
+    errorMsg = "エラーが発生しました。" & vbCrLf & _
+               "エラー番号: " & Err.Number & vbCrLf & _
+               "エラー内容: " & Err.Description & vbCrLf & _
+               "発生モジュール: " & errModule & vbCrLf & _
+               "発生プロシージャ: " & errProc
+
+    ' エラーログを試みる
+    If Not g_errorLogWorksheet Is Nothing And Not g_configSettings.MainWorkbookObject Is Nothing Then
+        Call M04_LogWriter.WriteErrorLog("CRITICAL", errModule, errProc, "エラー番号: " & Err.Number & " - " & Err.Description, Err.Number, Err.Description)
     Else
-        ' g_errorLogWorksheetが設定されていれば通常のWriteErrorLogを使用
-        Call M04_LogWriter.WriteErrorLog("ERROR", "M01_MainControl", "ExtractDataMain (GlobalErrorHandler_M01)", errSource, errNum, errDesc, "処理中断")
+        ' フォールバック: イミディエイトウィンドウへの出力
+        Debug.Print Now & " CRITICAL ERROR in " & errModule & "." & errProc & ": " & Err.Number & " - " & Err.Description
+        If g_errorLogWorksheet Is Nothing Then Debug.Print "g_errorLogWorksheet is Nothing."
+        If g_configSettings.MainWorkbookObject Is Nothing Then Debug.Print "g_configSettings.MainWorkbookObject is Nothing."
     End If
 
-    MsgBox "エラーが発生しました。" & vbCrLf & _
-           "エラー番号: " & errNum & vbCrLf & _
-           "内容: " & errDesc & vbCrLf & _
-           "発生元: " & errSource & vbCrLf & _
-           "処理を中断します。", vbCritical, "実行時エラー"
-    Resume FinalizeMacro_M01
+    MsgBox errorMsg, vbCritical, "実行時エラー"
+    Resume FinalizeRoutine
 End Sub
 
-' Helper Procedure: InitializeConfigStructure
-Private Sub InitializeConfigStructure(ByRef configStruct As tConfigSettings)
-    ' 引数で受け取ったtConfigSettings型の構造体の全メンバー（特に動的配列）を初期化（Erase）します。
-    If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M01_MainControl.InitializeConfigStructure - 初期化開始"
+' Private Sub: InitializeConfigStructure
+' グローバル設定変数 g_configSettings の各メンバーを初期化（特に配列系）
+Private Sub InitializeConfigStructure(ByRef config As tConfigSettings)
+    ' A. General Settings
+    config.DebugModeFlag = False
+    config.DefaultFolderPath = vbNullString
+    config.OutputSheetName = "抽出結果"
+    config.SearchConditionLogSheetName = "検索条件ログ"
+    config.ErrorLogSheetName = "エラーログ"
+    config.ConfigSheetName = CONFIG_SHEET_DEFAULT_NAME
+    config.GetPatternDataMethod = True
 
-    Erase configStruct.TargetSheetNames
-    Erase configStruct.ProcessKeys
-    Erase configStruct.Kankatsu1List
-    Erase configStruct.Kankatsu2List
-    Erase configStruct.Bunrui1List
-    Erase configStruct.Bunrui2List
-    Erase configStruct.Bunrui3List
-    Erase configStruct.ProcessColCountSheetHeaders
-    Erase configStruct.ProcessColCounts
-    Erase configStruct.ProcessDetails
-    Erase configStruct.ProcessPatternColNumbers
-    Erase configStruct.WorkerFilterList
-    Erase configStruct.Kankatsu1FilterList
-    Erase configStruct.Kankatsu2FilterList
-    Erase configStruct.KoujiShuruiFilterList
-    Erase configStruct.KoubanFilterList
-    Erase configStruct.SagyoushuruiFilterList
-    Erase configStruct.TantouFilterList
-    Erase configStruct.SagyouKashoFilterList
-    Erase configStruct.TargetFileFolderPaths
-    Erase configStruct.FilePatternIdentifiers
-    ' Erase configStruct.OffsetItemNames ' Obsolete - specific members used directly
-    ' Erase configStruct.OffsetValuesRaw ' Obsolete - specific members used directly
-    ' Erase configStruct.Offsets ' Obsolete - specific members used directly
-    Erase configStruct.OutputHeaderContents
-    Erase configStruct.HideSheetNames
+    ' B. Schedule File Settings
+    Erase config.TargetSheetNames
+    config.HeaderRowCount = 0
+    config.HeaderColCount = 0
+    config.RowsPerDay = 0
+    config.MaxDaysPerSheet = 0
+    config.YearCellAddress = vbNullString
+    config.MonthCellAddress = vbNullString
+    config.DayColumnLetter = vbNullString
+    config.DayRowOffset = 0
+    config.ProcessesPerDay = 0
 
-    If g_configSettings.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M01_MainControl.InitializeConfigStructure - 初期化完了"
+    ' C. Process Pattern Definition
+    config.CurrentPatternIdentifier = vbNullString
+    Erase config.ProcessKeys
+    Erase config.Kankatsu1List
+    Erase config.Kankatsu2List
+    Erase config.Bunrui1List
+    Erase config.Bunrui2List
+    Erase config.Bunrui3List
+    Erase config.ProcessColCountSheetHeaders
+    Erase config.ProcessColCounts
+    Erase config.ProcessDetails
+    Erase config.ProcessPatternColNumbers
+
+    ' D. Filter Conditions
+    config.WorkerFilterLogic = "AND"
+    Erase config.WorkerFilterList
+    Erase config.Kankatsu1FilterList
+    Erase config.Kankatsu2FilterList
+    config.Bunrui1Filter = vbNullString
+    config.Bunrui2Filter = vbNullString
+    config.Bunrui3Filter = vbNullString
+    Erase config.KoujiShuruiFilterList
+    Erase config.KoubanFilterList
+    Erase config.SagyoushuruiFilterList
+    Erase config.TantouFilterList
+    config.NinzuFilter = vbNullString
+    config.IsNinzuFilterOriginallyEmpty = True
+    config.SagyouKashoKindFilter = vbNullString
+    Erase config.SagyouKashoFilterList
+
+    ' E. Target File Definition
+    Erase config.TargetFileFolderPaths
+    Erase config.FilePatternIdentifiers
+
+    ' F. Extraction Data Offset Definition
+    Erase config.OffsetItemNames
+    Erase config.OffsetValuesRaw
+    Erase config.Offsets
+    config.IsOffsetKoubanOriginallyEmpty = True
+    config.IsOffsetHensendenjoOriginallyEmpty = True
+    config.IsOffsetSagyomei1OriginallyEmpty = True
+    config.IsOffsetSagyomei2OriginallyEmpty = True
+    config.IsOffsetTantouOriginallyEmpty = True
+    config.IsOffsetKoujiShuruiOriginallyEmpty = True
+    config.IsOffsetNinzuOriginallyEmpty = True
+    config.IsOffsetSagyoinOriginallyEmpty = True
+    config.IsOffsetSonotaOriginallyEmpty = True
+    config.IsOffsetShuuryoJikanOriginallyEmpty = True
+    config.IsOffsetBunrui1ExtSrcOriginallyEmpty = True
+
+    ' G. Output Sheet Settings
+    config.OutputHeaderRowCount = 1
+    Erase config.OutputHeaderContents
+    config.OutputDataOption = "上書き"
+    config.HideSheetMethod = "非表示"
+    Erase config.HideSheetNames
+
+    ' Additional Members
+    config.StartTime = CDate(0)
+    config.ScriptFullName = vbNullString
+    config.WorkSheetName = "Work"
+    config.ConfigSheetFullName = vbNullString
+    Set config.MainWorkbookObject = Nothing
+
 End Sub
 
-' Helper Function: LogMain_IsArrayInitialized
-Private Function LogMain_IsArrayInitialized(arr As Variant) As Boolean
-    ' 配列が初期化されているか（少なくとも1つの要素を持つか）を確認します。
-    ' Variant型が配列でない場合、または配列であっても要素が割り当てられていない場合（Dim arr() のみでReDimされていない状態など）はFalseを返します。
-    On Error GoTo NotAnArrayOrNotInitialized
-    If IsArray(arr) Then
-        Dim lBoundCheck As Long
-        lBoundCheck = LBound(arr)
-        LogMain_IsArrayInitialized = True ' LBoundがエラーを起こさなければ、配列は有効（空でもReDimされていればOK）
+' Helper function to check for supported Excel file extensions
+Private Function IsSupportedExcelFile(ByVal filePath As String, ByVal fso As Object) As Boolean
+    Dim extension As String
+    extension = LCase(fso.GetExtensionName(filePath))
+    Select Case extension
+        Case "xls", "xlsx", "xlsm", "xlsb"
+            IsSupportedExcelFile = True
+        Case Else
+            IsSupportedExcelFile = False
+    End Select
+End Function
+
+' 汎用配列初期化チェック関数
+Public Function General_IsArrayInitialized(arr As Variant) As Boolean
+    If Not IsArray(arr) Then
+        General_IsArrayInitialized = False
         Exit Function
     End If
-NotAnArrayOrNotInitialized:
-    LogMain_IsArrayInitialized = False
+    On Error Resume Next
+    Dim lBoundCheck As Long
+    lBoundCheck = LBound(arr)
+    If Err.Number <> 0 Then
+        General_IsArrayInitialized = False
+        Err.Clear
+    Else
+        General_IsArrayInitialized = True
+    End If
+    On Error GoTo 0
 End Function

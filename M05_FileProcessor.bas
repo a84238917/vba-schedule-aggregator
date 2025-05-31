@@ -1,89 +1,142 @@
-' バージョン：v0.5.0
+' バージョン：v0.5.1
 Option Explicit
-' このモジュールは、処理対象となる工程表ファイルのリストを取得・管理します。このステップでは、Configシートの特定セルから単一のファイルパスを取得する簡易版を実装します。
+' このモジュールは、処理対象となるファイルパスの特定と管理を行います。
+' 設定に基づいてフォルダを探索し、対象となるExcelファイルのリストを作成します。
 
-Private Function LogFileProcessor_IsArrayInitialized(arr As Variant) As Boolean
-    ' 配列が有効に初期化されているか（少なくとも1つの要素を持つか）を確認します。
-    ' Variant型が配列でない場合、または配列であっても要素が割り当てられていない場合（Dim arr() のみでReDimされていない状態など）はFalseを返します。
-    On Error GoTo NotAnArrayOrNotInitialized_FP
-    If IsArray(arr) Then
-        Dim lBoundCheck As Long
-        lBoundCheck = LBound(arr)
-        LogFileProcessor_IsArrayInitialized = True
+Private Const MODULE_NAME As String = "M05_FileProcessor"
+
+' Public Function: GetTargetFiles
+' 設定情報に基づき、処理対象となる全てのExcelファイルのフルパスと、
+' 対応する工程パターン識別子を収集します。
+' Parameters:
+'   ByRef config As tConfigSettings - 設定情報
+'   ByVal mainWorkbook As Workbook - メインワークブック (ログ記録用)
+'   ByRef foundFilesDetails As Collection - (Output) 見つかったファイル詳細(PathとPatternIDを持つDictionary)を格納するコレクション
+' Returns: Boolean - 処理が正常に完了した場合はTrue、エラー発生時はFalse
+Public Function GetTargetFiles(ByRef config As tConfigSettings, ByVal mainWorkbook As Workbook, ByRef foundFilesDetails As Collection) As Boolean
+    Dim funcName As String: funcName = "GetTargetFiles"
+    Dim fso As Object ' FileSystemObject
+    Dim i As Long
+    Dim pathItem As String
+    Dim patternIdItem As String
+    Dim fileItem As Object ' Scripting.File
+    Dim folderItem As Object ' Scripting.Folder
+    Dim fileDetail As Object ' Scripting.Dictionary to store path and patternID
+
+    On Error GoTo ErrorHandler
+
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    Set foundFilesDetails = New Collection ' 出力用コレクションを初期化
+
+    If Not General_IsArrayInitialized(config.TargetFileFolderPaths) Then
+        Call M04_LogWriter.WriteErrorLog("INFORMATION", MODULE_NAME, funcName, "処理対象ファイル/フォルダパスリスト(TargetFileFolderPaths)が空または未初期化です。")
+        GetTargetFiles = True ' 処理は成功（ファイルが見つからなかっただけ）
         Exit Function
     End If
-NotAnArrayOrNotInitialized_FP:
-    LogFileProcessor_IsArrayInitialized = False
+
+    For i = LBound(config.TargetFileFolderPaths) To UBound(config.TargetFileFolderPaths)
+        pathItem = Trim(CStr(config.TargetFileFolderPaths(i)))
+
+        ' 対応する工程パターン識別子を取得
+        If General_IsArrayInitialized(config.FilePatternIdentifiers) And _
+           i >= LBound(config.FilePatternIdentifiers) And _
+           i <= UBound(config.FilePatternIdentifiers) Then
+            patternIdItem = Trim(CStr(config.FilePatternIdentifiers(i)))
+        Else
+            patternIdItem = "" ' デフォルトまたはエラーケース
+            Call M04_LogWriter.WriteErrorLog("WARNING", MODULE_NAME, funcName, "工程パターン識別子リストのインデックス" & i & "に対応する値がありません。パス「" & pathItem & "」には空のパターンIDが使用されます。")
+        End If
+
+        If pathItem = "" Then
+            Call M04_LogWriter.WriteErrorLog("WARNING", MODULE_NAME, funcName, "処理対象パスが空です。スキップします。(インデックス: " & i & ")")
+            GoTo NextPath
+        End If
+
+        If fso.FolderExists(pathItem) Then
+            Set folderItem = fso.GetFolder(pathItem)
+            If folderItem.Files.Count = 0 Then
+                 Call M04_LogWriter.WriteErrorLog("INFORMATION", MODULE_NAME, funcName, "対象フォルダ「" & pathItem & "」にファイルが存在しません。")
+                 GoTo NextPath
+            End If
+            For Each fileItem In folderItem.Files
+                If IsExcelFile(fileItem.Name, fso) Then
+                    Set fileDetail = CreateObject("Scripting.Dictionary")
+                    fileDetail("Path") = fileItem.Path
+                    fileDetail("PatternID") = patternIdItem
+                    foundFilesDetails.Add fileDetail
+                End If
+            Next fileItem
+        ElseIf fso.FileExists(pathItem) Then
+            If IsExcelFile(pathItem, fso) Then
+                Set fileDetail = CreateObject("Scripting.Dictionary")
+                fileDetail("Path") = pathItem
+                fileDetail("PatternID") = patternIdItem
+                foundFilesDetails.Add fileDetail
+            Else
+                Call M04_LogWriter.WriteErrorLog("WARNING", MODULE_NAME, funcName, "指定されたファイル「" & pathItem & "」はExcelファイルではありません。スキップします。")
+            End If
+        Else
+            Call M04_LogWriter.WriteErrorLog("ERROR", MODULE_NAME, funcName, "指定されたパス「" & pathItem & "」が見つかりません。")
+            ' GetTargetFiles = False ' 処理を中断する場合はFalseにする
+        End If
+NextPath:
+    ' Erroneous "Loop" keyword removed from here. The For...Next i handles the loop continuation.
+    Next i
+
+
+    If foundFilesDetails.Count = 0 Then
+        Call M04_LogWriter.WriteErrorLog("INFORMATION", MODULE_NAME, funcName, "処理対象となるExcelファイルは見つかりませんでした。")
+    Else
+        Call M04_LogWriter.WriteErrorLog("INFORMATION", MODULE_NAME, funcName, foundFilesDetails.Count & "個の処理対象Excelファイル(と対応パターンID)が見つかりました。")
+    End If
+
+    GetTargetFiles = True ' 処理完了
+    GoTo CleanupAndExit
+
+ErrorHandler:
+    Call M04_LogWriter.WriteErrorLog("CRITICAL", MODULE_NAME, funcName, "ファイル特定処理中に予期せぬエラーが発生しました。", Err.Number, Err.Description)
+    GetTargetFiles = False
+
+CleanupAndExit:
+    Set fso = Nothing
+    Set fileItem = Nothing
+    Set folderItem = Nothing
+    Set fileDetail = Nothing
 End Function
 
-Private Function IsExcelFile(ByVal fileName As String) As Boolean
-    ' 指定されたファイル名が一般的なExcelファイルの拡張子を持つかどうかを判定します。
-    Dim ext As String
-    If InStrRev(fileName, ".") = 0 Then ' No extension
+' Private Helper Function: IsExcelFile
+Private Function IsExcelFile(ByVal fileNameOrPath As String, ByVal fso As Object) As Boolean
+    Dim extension As String
+    On Error Resume Next
+    extension = fso.GetExtensionName(fileNameOrPath)
+    If Err.Number <> 0 Then
         IsExcelFile = False
+        Err.Clear
         Exit Function
     End If
-    ext = LCase(Right(fileName, Len(fileName) - InStrRev(fileName, ".")))
+    On Error GoTo 0
 
-    Select Case ext
-        Case "xlsx", "xls", "xlsm"
+    Select Case LCase(extension)
+        Case "xls", "xlsx", "xlsm", "xlsb"
             IsExcelFile = True
         Case Else
             IsExcelFile = False
     End Select
 End Function
 
-Public Function GetTargetFiles(ByRef config As tConfigSettings, ByVal mainAppWorkbook As Workbook, ByRef targetFilesCollection As Collection) As Boolean
-    ' Config設定 (P557) から単一の処理対象ファイルパスを取得し、検証後、コレクションに追加します。(ステップ4限定仕様)
-    ' Arguments:
-    '   config: (I) tConfigSettings型。設定情報を保持します。ErrorLogSheetName と TargetFileFolderPaths(0) を使用します。
-    '   mainAppWorkbook: (I) Workbook型。マクロ本体（ログシートが存在する）のワークブックオブジェクト。
-    '   targetFilesCollection: (O) Collection型。検証済みのファイルパスが追加されます。
-    ' Returns:
-    '   Boolean: ファイルパスの取得と検証に成功し、コレクションに追加できた場合はTrue、それ以外はFalse。
-
-    Dim fso As Object
-    Dim filePathFromConfig As String
-    Dim successFlag As Boolean ' Local flag for clarity before setting function return
-
-    successFlag = False ' Default to failure
-    On Error GoTo GetTargetFiles_Error
-
-    Set fso = CreateObject("Scripting.FileSystemObject")
-
-    ' 設定構造体からファイルパスを取得 (ステップ4では config.TargetFileFolderPaths(0) にP557の値が入っている想定)
-    If LogFileProcessor_IsArrayInitialized(config.TargetFileFolderPaths) Then
-        If UBound(config.TargetFileFolderPaths) >= LBound(config.TargetFileFolderPaths) Then
-            filePathFromConfig = config.TargetFileFolderPaths(LBound(config.TargetFileFolderPaths))
-        Else
-            filePathFromConfig = "" ' Array is initialized but empty
-        End If
-    Else
-        filePathFromConfig = "" ' Array not initialized
+Public Function General_IsArrayInitialized(arr As Variant) As Boolean
+    If Not IsArray(arr) Then
+        General_IsArrayInitialized = False
+        Exit Function
     End If
-
-    If Len(filePathFromConfig) > 0 Then
-        If fso.FileExists(filePathFromConfig) Then
-            If IsExcelFile(filePathFromConfig) Then
-                targetFilesCollection.Add filePathFromConfig
-                successFlag = True
-                If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M05_FileProcessor.GetTargetFiles - Added target file: '" & filePathFromConfig & "'"
-            Else
-                Call M04_LogWriter.SafeWriteErrorLog("WARNING", mainAppWorkbook, config.ErrorLogSheetName, "M05_FileProcessor", "GetTargetFiles", "指定されたファイルはExcelファイルではありません: " & filePathFromConfig, 0, "")
-            End If
-        Else
-            Call M04_LogWriter.SafeWriteErrorLog("ERROR", mainAppWorkbook, config.ErrorLogSheetName, "M05_FileProcessor", "GetTargetFiles", "指定されたファイルが見つかりません: " & filePathFromConfig, 0, "")
-        End If
+    On Error Resume Next
+    Dim lBoundCheck As Long
+    lBoundCheck = LBound(arr)
+    If Err.Number <> 0 Then
+        General_IsArrayInitialized = False
+        Err.Clear
     Else
-        Call M04_LogWriter.SafeWriteErrorLog("WARNING", mainAppWorkbook, config.ErrorLogSheetName, "M05_FileProcessor", "GetTargetFiles", "ConfigシートP557に処理対象ファイルパスが指定されていません。", 0, "")
+        General_IsArrayInitialized = True
     End If
-
-    GetTargetFiles = successFlag
-    Set fso = Nothing
-    Exit Function
-
-GetTargetFiles_Error:
-    Call M04_LogWriter.SafeWriteErrorLog("ERROR", mainAppWorkbook, config.ErrorLogSheetName, "M05_FileProcessor", "GetTargetFiles", "実行時エラー " & Err.Number & ": " & Err.Description, Err.Number, Err.Description)
-    GetTargetFiles = False
-    Set fso = Nothing
+    On Error GoTo 0
 End Function

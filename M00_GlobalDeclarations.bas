@@ -1,4 +1,4 @@
-' バージョン：v0.5.0
+' バージョン：v0.5.1
 Option Explicit
 ' このモジュールは、プロジェクト全体で共有されるグローバル定数、Publicなユーザー定義型、およびPublicなグローバル変数を一元的に宣言・管理します。
 
@@ -8,7 +8,7 @@ Public Const DEBUG_MODE_WARNING As Boolean = False ' 警告レベルのデバッ
 ' Public Const DEBUG_MODE_DETAIL As Boolean = False  ' 詳細な処理追跡情報を出力するかどうか (g_configSettings.TraceDebugEnabled に置き換え)
 
 ' Fixed Setting Value Constant
-Public Const CONFIG_SHEET_DEFAULT_NAME As String = "Config (2)" ' 設定シートのデフォルト名
+Public Const CONFIG_SHEET_DEFAULT_NAME As String = "Config" ' 設定シートのデフォルト名
 
 ' 作業員ヘッダー判定用デフォルト値
 Public Const DEFAULT_WORKER_HEADER_PREFIX As String = "作業員"
