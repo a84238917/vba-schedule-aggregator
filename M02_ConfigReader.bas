@@ -55,23 +55,23 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
         configStruct.ConfigSheetFullName = targetWorkbook.FullName & " | " & wsConfig.Name
 
         Call LoadGeneralSettings(configStruct, wsConfig)
-        If Err.Number <> 0 Then Call LogErrorAndSetOccurredFlag(MODULE_NAME, funcName, "LoadGeneralSettings", Err.Number, Err.Description)
+        If Err.Number <> 0 Then Call M02Reader_LogAndSetError(MODULE_NAME, funcName, "LoadGeneralSettings", Err.Number, Err.Description)
         If m_errorOccurred Then GoTo FinalConfigCheck_LoadConfig
 
         Call LoadScheduleFileSettings(configStruct, wsConfig)
-        If Err.Number <> 0 Then Call LogErrorAndSetOccurredFlag(MODULE_NAME, funcName, "LoadScheduleFileSettings", Err.Number, Err.Description)
+        If Err.Number <> 0 Then Call M02Reader_LogAndSetError(MODULE_NAME, funcName, "LoadScheduleFileSettings", Err.Number, Err.Description)
         If m_errorOccurred Then GoTo FinalConfigCheck_LoadConfig
 
         Call LoadProcessPatternDefinition(configStruct, wsConfig) ' UNCOMMENTED
-        If Err.Number <> 0 Then Call LogErrorAndSetOccurredFlag(MODULE_NAME, funcName, "LoadProcessPatternDefinition", Err.Number, Err.Description)
+        If Err.Number <> 0 Then Call M02Reader_LogAndSetError(MODULE_NAME, funcName, "LoadProcessPatternDefinition", Err.Number, Err.Description)
         If m_errorOccurred Then GoTo FinalConfigCheck_LoadConfig
 
         Call LoadFilterConditions(configStruct, wsConfig)
-        If Err.Number <> 0 Then Call LogErrorAndSetOccurredFlag(MODULE_NAME, funcName, "LoadFilterConditions", Err.Number, Err.Description)
+        If Err.Number <> 0 Then Call M02Reader_LogAndSetError(MODULE_NAME, funcName, "LoadFilterConditions", Err.Number, Err.Description)
         If m_errorOccurred Then GoTo FinalConfigCheck_LoadConfig
 
         Call LoadTargetFileDefinition(configStruct, wsConfig) ' UNCOMMENTED
-        If Err.Number <> 0 Then Call LogErrorAndSetOccurredFlag(MODULE_NAME, funcName, "LoadTargetFileDefinition", Err.Number, Err.Description)
+        If Err.Number <> 0 Then Call M02Reader_LogAndSetError(MODULE_NAME, funcName, "LoadTargetFileDefinition", Err.Number, Err.Description)
         If m_errorOccurred Then GoTo FinalConfigCheck_LoadConfig
 
         ' --- F. 抽出データオフセット定義 ---
@@ -187,11 +187,11 @@ FinalConfigCheck_LoadConfig:
     End If
     Exit Function
 ErrorHandler_LoadConfiguration:
-    Call LogErrorAndSetOccurredFlag(MODULE_NAME, funcName, "LoadConfigurationメイン処理", Err.Number, Err.Description)
+    Call M02Reader_LogAndSetError(MODULE_NAME, funcName, "LoadConfigurationメイン処理", Err.Number, Err.Description)
     Resume FinalConfigCheck_LoadConfig
 End Function
 
-Private Sub LogErrorAndSetOccurredFlag(ByVal moduleN As String, ByVal callerProcName As String, ByVal failedSubName As String, ByVal errNum As Long, ByVal errDesc As String)
+Private Sub M02Reader_LogAndSetError(ByVal moduleN As String, ByVal callerProcName As String, ByVal failedSubName As String, ByVal errNum As Long, ByVal errDesc As String)
     m_errorOccurred = True
     Call M04_LogWriter.WriteErrorLog("ERROR", moduleN, callerProcName, failedSubName & " からエラーが伝播 (または新規発生)。", errNum, errDesc)
 End Sub
@@ -233,7 +233,7 @@ Private Sub LoadGeneralSettings(ByRef config As tConfigSettings, ByVal ws As Wor
     config.GetPatternDataMethod = ReadBoolCell(ws, "O122", MODULE_NAME, funcName, currentItem)
     Exit Sub
 ErrorHandler_LoadGeneralSettings:
-    Call LogErrorAndSetOccurredFlag(MODULE_NAME, funcName, "一般設定「" & currentItem & "」読込エラー", Err.Number, Err.Description)
+    Call M02Reader_LogAndSetError(MODULE_NAME, funcName, "一般設定「" & currentItem & "」読込エラー", Err.Number, Err.Description)
 End Sub
 
 Private Sub LoadScheduleFileSettings(ByRef config As tConfigSettings, ByVal ws As Worksheet)
@@ -267,7 +267,7 @@ Private Sub LoadScheduleFileSettings(ByRef config As tConfigSettings, ByVal ws A
     config.ProcessesPerDay = ReadLongCell(ws, "O114", MODULE_NAME, funcName, currentItem)
     Exit Sub
 ErrorHandler_LoadScheduleFileSettings:
-    Call LogErrorAndSetOccurredFlag(MODULE_NAME, funcName, "工程表ファイル設定「" & currentItem & "」読込エラー", Err.Number, Err.Description)
+    Call M02Reader_LogAndSetError(MODULE_NAME, funcName, "工程表ファイル設定「" & currentItem & "」読込エラー", Err.Number, Err.Description)
 End Sub
 
 Private Sub LoadProcessPatternDefinition(ByRef config As tConfigSettings, ByVal ws As Worksheet)
@@ -360,7 +360,7 @@ Private Sub LoadProcessPatternDefinition(ByRef config As tConfigSettings, ByVal 
     End If
     Exit Sub
 ErrorHandler_LoadProcessPatternDefinition:
-    Call LogErrorAndSetOccurredFlag(MODULE_NAME, funcName, "工程パターン定義「" & currentItem & "」読込エラー", Err.Number, Err.Description)
+    Call M02Reader_LogAndSetError(MODULE_NAME, funcName, "工程パターン定義「" & currentItem & "」読込エラー", Err.Number, Err.Description)
 End Sub
 
 Private Sub LoadFilterConditions(ByRef config As tConfigSettings, ByVal ws As Worksheet)
@@ -428,7 +428,7 @@ Private Sub LoadFilterConditions(ByRef config As tConfigSettings, ByVal ws As Wo
 
     Exit Sub
 ErrorHandler_LoadFilterConditions:
-    Call LogErrorAndSetOccurredFlag(MODULE_NAME, funcName, "フィルター条件「" & currentItem & "」読込エラー", Err.Number, Err.Description)
+    Call M02Reader_LogAndSetError(MODULE_NAME, funcName, "フィルター条件「" & currentItem & "」読込エラー", Err.Number, Err.Description)
 End Sub
 
 Private Sub LoadTargetFileDefinition(ByRef config As tConfigSettings, ByVal ws As Worksheet)
@@ -449,7 +449,7 @@ Private Sub LoadTargetFileDefinition(ByRef config As tConfigSettings, ByVal ws A
 
     Exit Sub
 ErrorHandler_LoadTargetFileDefinition:
-    Call LogErrorAndSetOccurredFlag(MODULE_NAME, funcName, "処理対象ファイル定義「" & currentItem & "」読込エラー", Err.Number, Err.Description)
+    Call M02Reader_LogAndSetError(MODULE_NAME, funcName, "処理対象ファイル定義「" & currentItem & "」読込エラー", Err.Number, Err.Description)
 End Sub
 
 ' --- Reading Helper Functions ---
