@@ -653,14 +653,36 @@ InvalidArrayStructure_CVTSA:
         End If
     End If
 
-    ConvertRawVariantToStringArray = tempList
-    If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, "ConvertRawVariantToStringArray END for item: '" & itemName & "' (called by " & funcN_from_caller & "). Returning array LBound=" & LBound(tempList) & ", UBound=" & UBound(tempList))
+    ConvertRawVariantToStringArray = tempList ' Assign the result first
+
+    If currentConfig.DebugDetailLevel2Enabled Then
+        Dim l_temp As String, u_temp As String
+        On Error Resume Next ' Protect LBound/UBound for logging just in case tempList is weird despite prior ReDims
+        l_temp = CStr(LBound(tempList))
+        u_temp = CStr(UBound(tempList))
+        If Err.Number <> 0 Then
+            l_temp = "Err"
+            u_temp = "Err"
+            Err.Clear
+        End If
+        On Error GoTo ErrorHandler_CVTSA ' Restore error handler for the main function
+
+        ' Now protect the WriteErrorLog call itself
+        On Error Resume Next
+        Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, "ConvertRawVariantToStringArray END for item: '" & itemName & "' (called by " & funcN_from_caller & "). Returning array LBound=" & l_temp & ", UBound=" & u_temp)
+        If Err.Number <> 0 Then
+            Debug.Print Now & " CRITICAL: Error occurred *during* final WriteErrorLog in ConvertRawVariantToStringArray for " & itemName & ". Error: " & Err.Description
+            Err.Clear
+        End If
+        On Error GoTo ErrorHandler_CVTSA ' Restore intended error handler
+    End If
     Exit Function
 
 ErrorHandler_CVTSA:
-    tempMsg = itemName & " の変換中に予期せぬエラー。 (呼び出し元: " & funcN_from_caller & ")"
-    Call M04_LogWriter.WriteErrorLog("CRITICAL_L2", moduleN, localFuncName, tempMsg, Err.Number, Err.Description)
-    ReDim tempList(1 To 0)
+    Dim tempMsgForHandler As String ' Use a different variable name for the message
+    tempMsgForHandler = itemName & " の変換中に予期せぬエラー。 (呼び出し元: " & funcN_from_caller & ")"
+    Debug.Print Now & " CRITICAL_ERROR in ConvertRawVariantToStringArray." & localFuncName & ": " & tempMsgForHandler & " Err# " & Err.Number & " - " & Err.Description ' Use localFuncName
+    ReDim tempList(1 To 0) ' Ensure a safe empty array is returned
     ConvertRawVariantToStringArray = tempList
 End Function
 

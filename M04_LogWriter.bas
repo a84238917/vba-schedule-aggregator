@@ -9,28 +9,33 @@ Private Const MODULE_NAME As String = "M04_LogWriter"
 ' エラーログシートにエラー情報を書き込みます。
 Public Sub WriteErrorLog(ByVal errorLevel As String, ByVal moduleN As String, ByVal procedureN As String, _
                          ByVal message As String, Optional errNumber As Long = 0, Optional errDescription As String = "")
-    Dim funcName As String: funcName = "WriteErrorLog"
+    Dim funcName_Internal As String: funcName_Internal = "WriteErrorLog_Internal" ' Use a different name to avoid confusion if procedureN is "WriteErrorLog"
 
-    On Error GoTo ErrorHandler
+    On Error GoTo ErrorHandler_WriteErrorLog ' Internal error handler for WriteErrorLog
 
     If g_errorLogWorksheet Is Nothing Then
-        Debug.Print Now & " WriteErrorLog FATAL: g_errorLogWorksheet is Not Set. Cannot log error."
-        Debug.Print "  > Level: " & errorLevel & ", Module: " & moduleN & ", Proc: " & procedureN
-        Debug.Print "  > Message: " & message
+        Debug.Print Now & " WriteErrorLog FALLBACK (g_errorLogWorksheet is Nothing): Level=" & errorLevel & ", Mod=" & moduleN & ", Proc=" & procedureN & ", Msg=" & message
         If errNumber <> 0 Then Debug.Print "  > Err #: " & errNumber & " - " & errDescription
         Exit Sub
     End If
 
-    If g_nextErrorLogRow <= 0 Then
-        ' M03_SheetManager.PrepareSheets で設定されるはずだが、万が一のためのフォールバック
+    If g_nextErrorLogRow <= 0 Then ' Should have been initialized by PrepareErrorLogSheet
         If Application.WorksheetFunction.CountA(g_errorLogWorksheet.Rows(1)) = 0 Then
              g_nextErrorLogRow = 1
         Else
              g_nextErrorLogRow = g_errorLogWorksheet.Cells(Rows.Count, "A").End(xlUp).Row + 1
         End If
-        If g_nextErrorLogRow <=0 Then g_nextErrorLogRow = 1 '最終フォールバック
+        If g_nextErrorLogRow <= 0 Then g_nextErrorLogRow = 1 ' Final fallback
     End If
 
+    ' Check if g_nextErrorLogRow exceeds sheet capacity
+    If g_nextErrorLogRow > g_errorLogWorksheet.Rows.Count Then
+        ' Option 1: Stop logging to sheet to prevent overflow error
+        Debug.Print Now & " WriteErrorLog HALT: g_nextErrorLogRow (" & g_nextErrorLogRow & ") exceeds sheet rows (" & g_errorLogWorksheet.Rows.Count & "). Further logs to sheet suspended."
+        Debug.Print "  > Original Log: Level=" & errorLevel & ", Mod=" & moduleN & ", Proc=" & procedureN & ", Msg=" & message
+        ' Optionally, could try to write to row 1: g_nextErrorLogRow = 1
+        Exit Sub
+    End If
 
     With g_errorLogWorksheet
         .Cells(g_nextErrorLogRow, 1).Value = Now() ' 日時
@@ -50,9 +55,13 @@ Public Sub WriteErrorLog(ByVal errorLevel As String, ByVal moduleN As String, By
     g_nextErrorLogRow = g_nextErrorLogRow + 1
     Exit Sub
 
-ErrorHandler:
-    Debug.Print Now & " CRITICAL ERROR in M04_LogWriter.WriteErrorLog itself! Err# " & Err.Number & " - " & Err.Description
-    Debug.Print "  Original Log Attempt: Level=" & errorLevel & ", Module=" & moduleN & ", Proc=" & procedureN & ", Msg=" & message
+ErrorHandler_WriteErrorLog:
+    ' Critical error within WriteErrorLog itself. Only use Debug.Print.
+    Debug.Print Now & " CRITICAL ERROR in M04_LogWriter.WriteErrorLog ITSELF! Err# " & Err.Number & " - " & Err.Description
+    Debug.Print "  Attempted Log: Level=" & errorLevel & ", Mod=" & moduleN & ", Proc=" & procedureN & ", Msg=" & message
+    ' Do not try to call WriteErrorLog here.
+    ' Resume Next or Exit Sub can be chosen. Exit Sub is safer to prevent loops.
+    ' If this handler is reached, something is very wrong with the log sheet or Excel state.
 End Sub
 
 ' Public Sub: WriteFilterLog (Revised to only log D-Section: Filter Conditions)
