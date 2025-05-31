@@ -117,4 +117,6 @@ End Type
 Public g_configSettings As tConfigSettings   ' Configシートから読み込まれた全ての設定情報を格納するグローバル変数
 Public g_errorLogWorksheet As Worksheet      ' エラーログを書き込むワークシートオブジェクト
 Public g_nextErrorLogRow As Long             ' エラーログシートの次に書き込む行番号
+Public g_genericLogWorksheet As Worksheet    ' 汎用ログ（デバッグログ含む）を書き込むワークシートオブジェクト
+Public g_nextGenericLogRow As Long           ' 汎用ログシートの次に書き込む行番号
 Public Const MAX_WORKERS_TO_EXTRACT As Long = 10 ' 抽出する作業員の最大数

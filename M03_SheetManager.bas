@@ -88,6 +88,7 @@ Public Sub PrepareRemainingLogSheets(ByRef config As tConfigSettings, ByVal wb A
     ' This log is also controlled by EnableSheetLogging (O5)
     If config.EnableSheetLogging And Trim(config.LogSheetName) <> "" Then
         Set ws = EnsureSheetExists(config.LogSheetName, wb, wasCreated)
+        Set g_genericLogWorksheet = ws ' ★ Set global worksheet object
         If Not ws Is Nothing Then
             On Error Resume Next
             firstCellEmpty = IsEmpty(ws.Cells(1, 1).Value)
@@ -95,11 +96,22 @@ Public Sub PrepareRemainingLogSheets(ByRef config As tConfigSettings, ByVal wb A
             If wasCreated Or firstCellEmpty Then
                 Call WriteSheetHeaders(ws, "GenericLog", config)
             End If
+            ' Initialize g_nextGenericLogRow
+            If Application.WorksheetFunction.CountA(ws.Rows(1)) = 0 Then
+                 g_nextGenericLogRow = 1
+            Else
+                 g_nextGenericLogRow = ws.Cells(Rows.Count, "A").End(xlUp).Row + 1
+            End If
+            If g_nextGenericLogRow <= 0 Then g_nextGenericLogRow = 1
         Else
             Call M04_LogWriter.WriteErrorLog("ERROR", MODULE_NAME, funcName, "汎用ログシート「" & config.LogSheetName & "」の準備に失敗しました。")
+            Set g_genericLogWorksheet = Nothing ' Ensure it's Nothing if setup fails
+            g_nextGenericLogRow = 1 ' Reset
         End If
     ElseIf config.EnableSheetLogging And Trim(config.LogSheetName) = "" Then
          Call M04_LogWriter.WriteErrorLog("WARNING", MODULE_NAME, funcName, "汎用ログシート名(O42)が設定されていませんが、シートログ(O5)は有効です。")
+         Set g_genericLogWorksheet = Nothing ' No sheet name, so no sheet object
+         g_nextGenericLogRow = 1 ' Reset
     End If
     Set ws = Nothing
 

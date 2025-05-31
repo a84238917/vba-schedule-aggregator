@@ -9,58 +9,80 @@ Private Const MODULE_NAME As String = "M04_LogWriter"
 ' エラーログシートにエラー情報を書き込みます。
 Public Sub WriteErrorLog(ByVal errorLevel As String, ByVal moduleN As String, ByVal procedureN As String, _
                          ByVal message As String, Optional errNumber As Long = 0, Optional errDescription As String = "")
-    Dim funcName_Internal As String: funcName_Internal = "WriteErrorLog_Internal" ' Use a different name to avoid confusion if procedureN is "WriteErrorLog"
+    Dim funcName_Internal As String: funcName_Internal = "WriteErrorLog_Internal"
+    Dim targetSheet As Worksheet
+    Dim targetNextRow As Long
+    Dim isDebugLog As Boolean
+    isDebugLog = (Left(errorLevel, 6) = "DEBUG_")
 
-    If g_configSettings.DebugDetailLevel1Enabled Then
+    If isDebugLog Then
+        If Not g_configSettings.EnableSheetLogging Then Exit Sub ' Controlled by O5 for generic/debug logs
+        Set targetSheet = g_genericLogWorksheet
+        targetNextRow = g_nextGenericLogRow
+        ' Potentially use different WriteErrorLog specific debug level for these internal prints
+        If g_configSettings.DebugDetailLevel1Enabled Then ' Or a higher level for this internal logging
+            Debug.Print Now & " WriteErrorLog REDIRECTING DEBUG: Level=" & errorLevel & ", TargetSheet=" & IIf(targetSheet Is Nothing, "Nothing", targetSheet.Name) & ", NextRow=" & targetNextRow
+        End If
+    Else
+        ' For non-debug logs, proceed with error log sheet (already controlled by EnableErrorLogSheetOutput via g_errorLogWorksheet being Nothing or Set)
+        Set targetSheet = g_errorLogWorksheet
+        targetNextRow = g_nextErrorLogRow
+    End If
+
+    If g_configSettings.DebugDetailLevel1Enabled And Not isDebugLog Then ' Only print non-debug calls to immediate if L1 is on
         Debug.Print Now & " WriteErrorLog CALLED: Level=" & errorLevel & ", Mod=" & moduleN & ", Proc=" & procedureN & ", Msg=" & message & ", Err#=" & errNumber & ", ErrDesc=" & errDescription
     End If
 
-    On Error GoTo ErrorHandler_WriteErrorLog ' Internal error handler for WriteErrorLog
+    On Error GoTo ErrorHandler_WriteErrorLog
 
-    If g_errorLogWorksheet Is Nothing Then
-        Debug.Print Now & " WriteErrorLog FALLBACK (g_errorLogWorksheet is Nothing): Level=" & errorLevel & ", Mod=" & moduleN & ", Proc=" & procedureN & ", Msg=" & message
-        If errNumber <> 0 Then Debug.Print "  > Err #: " & errNumber & " - " & errDescription
+    If targetSheet Is Nothing Then
+        If isDebugLog And g_configSettings.EnableSheetLogging Then ' If it was supposed to be a sheet log but sheet is not ready
+             Debug.Print Now & " WriteErrorLog FALLBACK (targetSheet for DEBUG is Nothing): Level=" & errorLevel & ", Mod=" & moduleN & ", Proc=" & procedureN & ", Msg=" & message
+        ElseIf Not isDebugLog Then ' Standard error log fallback
+             Debug.Print Now & " WriteErrorLog FALLBACK (g_errorLogWorksheet is Nothing): Level=" & errorLevel & ", Mod=" & moduleN & ", Proc=" & procedureN & ", Msg=" & message
+             If errNumber <> 0 Then Debug.Print "  > Err #: " & errNumber & " - " & errDescription
+        End If
         Exit Sub
     End If
 
-    If g_nextErrorLogRow <= 0 Then ' Should have been initialized by PrepareErrorLogSheet
-        If Application.WorksheetFunction.CountA(g_errorLogWorksheet.Rows(1)) = 0 Then
-             g_nextErrorLogRow = 1
+    If targetNextRow <= 0 Then
+        If Application.WorksheetFunction.CountA(targetSheet.Rows(1)) = 0 Then
+             targetNextRow = 1
         Else
-             g_nextErrorLogRow = g_errorLogWorksheet.Cells(Rows.Count, "A").End(xlUp).Row + 1
+             targetNextRow = targetSheet.Cells(Rows.Count, "A").End(xlUp).Row + 1
         End If
-        If g_nextErrorLogRow <= 0 Then g_nextErrorLogRow = 1 ' Final fallback
+        If targetNextRow <= 0 Then targetNextRow = 1
     End If
 
-    ' Check if g_nextErrorLogRow exceeds sheet capacity
-    If g_nextErrorLogRow > g_errorLogWorksheet.Rows.Count Then
-        ' Option 1: Stop logging to sheet to prevent overflow error
-        Debug.Print Now & " WriteErrorLog HALT: g_nextErrorLogRow (" & g_nextErrorLogRow & ") exceeds sheet rows (" & g_errorLogWorksheet.Rows.Count & "). Further logs to sheet suspended."
-        Debug.Print "  > Original Log: Level=" & errorLevel & ", Mod=" & moduleN & ", Proc=" & procedureN & ", Msg=" & message
-        ' Optionally, could try to write to row 1: g_nextErrorLogRow = 1
+    If targetNextRow > targetSheet.Rows.Count Then
+        Debug.Print Now & " WriteErrorLog HALT: targetNextRow (" & targetNextRow & ") exceeds sheet rows (" & targetSheet.Rows.Count & ") for sheet " & targetSheet.Name
         Exit Sub
     End If
 
     If g_configSettings.DebugDetailLevel1Enabled Then
-        Debug.Print Now & " WriteErrorLog: Writing to Sheet '" & g_errorLogWorksheet.Name & "', Row: " & g_nextErrorLogRow
+        Debug.Print Now & " WriteErrorLog: Writing to Sheet '" & targetSheet.Name & "', Row: " & targetNextRow
     End If
 
-    With g_errorLogWorksheet
-        .Cells(g_nextErrorLogRow, 1).Value = Now() ' 日時
-        .Cells(g_nextErrorLogRow, 2).Value = errorLevel
-        .Cells(g_nextErrorLogRow, 3).Value = moduleN
-        .Cells(g_nextErrorLogRow, 4).Value = procedureN
-        .Cells(g_nextErrorLogRow, 5).Value = message
+    With targetSheet
+        .Cells(targetNextRow, 1).value = Now()
+        .Cells(targetNextRow, 2).value = errorLevel
+        .Cells(targetNextRow, 3).value = moduleN
+        .Cells(targetNextRow, 4).value = procedureN
+        .Cells(targetNextRow, 5).value = message
         If errNumber <> 0 Then
-            .Cells(g_nextErrorLogRow, 6).Value = errNumber
-            .Cells(g_nextErrorLogRow, 7).Value = errDescription
+            .Cells(targetNextRow, 6).value = errNumber
+            .Cells(targetNextRow, 7).value = errDescription
         Else
-            .Cells(g_nextErrorLogRow, 6).Value = vbNullString ' 空白を明示
-            .Cells(g_nextErrorLogRow, 7).Value = vbNullString ' 空白を明示
+            .Cells(targetNextRow, 6).value = vbNullString
+            .Cells(targetNextRow, 7).value = vbNullString
         End If
     End With
 
-    g_nextErrorLogRow = g_nextErrorLogRow + 1
+    If isDebugLog Then
+        g_nextGenericLogRow = targetNextRow + 1
+    Else
+        g_nextErrorLogRow = targetNextRow + 1
+    End If
     Exit Sub
 
 ErrorHandler_WriteErrorLog:
@@ -182,7 +204,7 @@ Public Sub WriteOperationLog(ByRef config As tConfigSettings, ByVal wb As Workbo
     Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "マクロファイル", config.ScriptFullName)
     Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "設定ファイルシート", config.ConfigSheetFullName)
     Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "デバッグモードフラグ(O3)", CStr(config.DebugModeFlag))
-    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "デバッグ詳細出力レベル1(O4)", CStr(config.DebugDetailLevel1Enabled))
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "デバッグ詳細出力レベル1(O4)", CStr(config.DebugDetailLevel1Enabled)) ' Verified: This line was already correct from previous subtask.
     Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "--- マクロ基本情報 ---", "終了")
 
     Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "--- A. 一般設定 (抜粋) ---", "開始")
