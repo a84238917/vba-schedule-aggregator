@@ -245,8 +245,10 @@ Private Sub LoadGeneralSettings(ByRef config As tConfigSettings, ByVal ws As Wor
     On Error Resume Next ' 特定のセルアクセスエラーをハンドルするため
 
     config.DebugModeFlag = ReadBoolCell(ws, "O3", MODULE_NAME, funcName, "デバッグモードフラグ")
-    ' O4 TraceDebugEnabled - not explicitly requested to add here, but missing from original LoadGeneralSettings
-    config.EnableSheetLogging = ReadBoolCell(ws, "O5", MODULE_NAME, funcName, "汎用ログシートへの出力有効フラグ")
+    config.TraceDebugEnabled = ReadBoolCell(ws, "O4", MODULE_NAME, funcName, "詳細トレースデバッグ有効フラグ", True) ' Assuming O4 is TraceDebugEnabled, Default True
+    config.EnableSheetLogging = ReadBoolCell(ws, "O5", MODULE_NAME, funcName, "汎用ログシートへの出力有効フラグ", True) ' Default True
+    config.EnableSearchConditionLogSheetOutput = ReadBoolCell(ws, "O6", MODULE_NAME, funcName, "検索条件ログシート出力有効フラグ", True) ' ★追加, Default True
+    config.EnableErrorLogSheetOutput = ReadBoolCell(ws, "O7", MODULE_NAME, funcName, "エラーログシート出力有効フラグ", True) ' ★追加, Default True
     config.DefaultFolderPath = ReadStringCell(ws, "O12", MODULE_NAME, funcName, "デフォルトフォルダパス")
     config.LogSheetName = ReadStringCell(ws, "O42", MODULE_NAME, funcName, "汎用ログシート名", "Log") ' Default to "Log" if O42 is empty
     config.OutputSheetName = ReadStringCell(ws, "O43", MODULE_NAME, funcName, "抽出結果出力シート名", "抽出結果")

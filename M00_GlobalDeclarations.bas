@@ -30,9 +30,11 @@ End Type
 Public Type tConfigSettings
     ' A. General Settings
     DebugModeFlag As Boolean              ' O3 デバッグモードフラグ
-    TraceDebugEnabled As Boolean          ' O4 詳細トレースデバッグ有効フラグ (旧DEBUG_MODE_DETAIL)
-    EnableSheetLogging As Boolean   ' O5 汎用ログシートへの出力有効フラグ
-    LogSheetName As String          ' O42 汎用ログシート名
+    TraceDebugEnabled As Boolean          ' O4 詳細トレースデバッグ有効フラグ
+    EnableSheetLogging As Boolean         ' O5 汎用ログシートへの出力有効フラグ (★GenericLog用)
+    EnableSearchConditionLogSheetOutput As Boolean ' O6 ★追加: 検索条件ログシート出力ON/OFF
+    EnableErrorLogSheetOutput As Boolean    ' O7 ★追加: エラーログシート出力ON/OFF
+    LogSheetName As String                ' O42 汎用ログシート名
     DefaultFolderPath As String           ' O12 デフォルトフォルダパス
     OutputSheetName As String             ' O43 抽出結果出力シート名
     SearchConditionLogSheetName As String ' O44 検索条件ログシート名

@@ -11,7 +11,13 @@ Public Sub PrepareErrorLogSheet(ByRef config As tConfigSettings, ByVal wb As Wor
     Dim funcName As String: funcName = "PrepareErrorLogSheet"
     Dim wasCreated As Boolean
 
-    On Error GoTo ErrorHandler_PrepareErrorLogSheet ' Specific error handler
+    If Not config.EnableErrorLogSheetOutput Then ' ★追加
+        Set g_errorLogWorksheet = Nothing
+        g_nextErrorLogRow = 1 ' Reset anyway
+        Exit Sub
+    End If
+
+    On Error GoTo ErrorHandler_PrepareErrorLogSheet
 
     If Trim(config.ErrorLogSheetName) = "" Then
         Debug.Print Now & " CRITICAL: " & MODULE_NAME & "." & funcName & " - ErrorLogSheetName is empty in config."
@@ -62,26 +68,26 @@ Public Sub PrepareRemainingLogSheets(ByRef config As tConfigSettings, ByVal wb A
     On Error GoTo ErrorHandler_PrepareRemainingLogSheets ' Specific error handler
 
     ' 検索条件ログシートの準備
-    If Trim(config.SearchConditionLogSheetName) <> "" Then
-        Set ws = EnsureSheetExists(config.SearchConditionLogSheetName, wb, wasCreated)
-        If Not ws Is Nothing Then
-            On Error Resume Next
-            firstCellEmpty = IsEmpty(ws.Cells(1, 1).Value)
-            On Error GoTo ErrorHandler_PrepareRemainingLogSheets
-            If wasCreated Or firstCellEmpty Then
-                Call WriteSheetHeaders(ws, "SearchLog", config)
+    If config.EnableSearchConditionLogSheetOutput Then ' ★追加
+        If Trim(config.SearchConditionLogSheetName) <> "" Then
+            Set ws = EnsureSheetExists(config.SearchConditionLogSheetName, wb, wasCreated)
+            If Not ws Is Nothing Then
+                On Error Resume Next
+                firstCellEmpty = IsEmpty(ws.Cells(1, 1).Value)
+                On Error GoTo ErrorHandler_PrepareRemainingLogSheets
+                If wasCreated Or firstCellEmpty Then
+                    Call WriteSheetHeaders(ws, "SearchLog", config)
+                End If
+            Else
+                Call M04_LogWriter.WriteErrorLog("ERROR", MODULE_NAME, funcName, "検索条件ログシート「" & config.SearchConditionLogSheetName & "」の準備に失敗しました。")
             End If
         Else
-            Call M04_LogWriter.WriteErrorLog("ERROR", MODULE_NAME, funcName, "検索条件ログシート「" & config.SearchConditionLogSheetName & "」の準備に失敗しました。")
+             Call M04_LogWriter.WriteErrorLog("WARNING", MODULE_NAME, funcName, "検索条件ログシート名が設定されていませんが、出力は有効です(O6)。")
         End If
-    Else
-        If config.EnableSheetLogging Then ' Only log warning if general sheet logging is on
-            Call M04_LogWriter.WriteErrorLog("WARNING", MODULE_NAME, funcName, "検索条件ログシート名が設定されていません。")
-        End If
-    End If
+    End If ' ★追加
     Set ws = Nothing ' Reset for next sheet
 
-    ' 汎用ログシートの準備 (Config O42: LogSheetName)
+    ' 汎用ログシートの準備 (Config O42: LogSheetName, controlled by O5: EnableSheetLogging)
     ' This log is also controlled by EnableSheetLogging (O5)
     If config.EnableSheetLogging And Trim(config.LogSheetName) <> "" Then
         Set ws = EnsureSheetExists(config.LogSheetName, wb, wasCreated)

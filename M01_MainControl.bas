@@ -178,6 +178,11 @@ End Sub
 Private Sub InitializeConfigStructure(ByRef config As tConfigSettings)
     ' A. General Settings
     config.DebugModeFlag = False
+    config.TraceDebugEnabled = False ' Initialize new member
+    config.EnableSheetLogging = True  ' Default for GenericLog
+    config.EnableSearchConditionLogSheetOutput = True ' ★追加 Default ON
+    config.EnableErrorLogSheetOutput = True    ' ★追加 Default ON
+    config.LogSheetName = "Log"       ' Initialize new member or ensure it's there
     config.DefaultFolderPath = vbNullString
     config.OutputSheetName = "抽出結果"
     config.SearchConditionLogSheetName = "検索条件ログ"

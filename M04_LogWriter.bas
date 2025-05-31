@@ -63,7 +63,7 @@ Public Sub WriteFilterLog(ByRef config As tConfigSettings, ByVal wb As Workbook)
     Dim nextLogWriteRow As Long
     Dim i As Long ' ループカウンタ
 
-    If Not config.EnableSheetLogging Then Exit Sub ' ★追加: シートロギングが無効なら終了
+    If Not config.EnableSearchConditionLogSheetOutput Then Exit Sub ' ★変更: O6で制御
 
     On Error GoTo ErrorHandler
 
