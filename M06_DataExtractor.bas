@@ -87,14 +87,14 @@ Public Function ExtractDataFromFile(ByVal targetFilePath As String, ByRef config
                              yearVal & "年" & monthVal & "月" & dayValAsLong & "日" & " | " & _
                              "工程" & procLoopIndex & ":"
 
-                If General_IsArrayInitialized(config.OffsetItemNames) And General_IsArrayInitialized(config.Offsets) Then
-                    If UBound(config.OffsetItemNames) = UBound(config.Offsets) And _
-                       LBound(config.OffsetItemNames) = LBound(config.Offsets) Then
-                        For i = LBound(config.OffsetItemNames) To UBound(config.OffsetItemNames)
+                If General_IsArrayInitialized(config.OffsetItemMasterNames) And General_IsArrayInitialized(config.OffsetDefinitions) Then
+                    If UBound(config.OffsetItemMasterNames) = UBound(config.OffsetDefinitions) And _
+                       LBound(config.OffsetItemMasterNames) = LBound(config.OffsetDefinitions) Then
+                        For i = LBound(config.OffsetItemMasterNames) To UBound(config.OffsetItemMasterNames)
                             Dim currentItemName As String
                             Dim currentOffset As tOffset
-                            currentItemName = config.OffsetItemNames(i)
-                            currentOffset = config.Offsets(i)
+                            currentItemName = config.OffsetItemMasterNames(i)
+                            currentOffset = config.OffsetDefinitions(i)
 
                             ' データ読み取り位置計算 (v0.1 シンプル版)
                             ' プロセスごとの列オフセットはCurrentPatternIdentifierとProcessPatternColNumbersから取得する想定だがv0.1では未実装
