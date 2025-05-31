@@ -55,27 +55,16 @@ ErrorHandler:
     Debug.Print "  Original Log Attempt: Level=" & errorLevel & ", Module=" & moduleN & ", Proc=" & procedureN & ", Msg=" & message
 End Sub
 
-' Public Sub: WriteFilterLog
-' 検索条件ログシートに、マクロ実行時の主要なフィルタ設定などを記録します。
+' Public Sub: WriteFilterLog (Revised to only log D-Section: Filter Conditions)
 Public Sub WriteFilterLog(ByRef config As tConfigSettings, ByVal wb As Workbook)
     Dim funcName As String: funcName = "WriteFilterLog"
     Dim wsLog As Worksheet
     Dim nextLogWriteRow As Long
-    Dim i As Long ' ループカウンタ
 
-    If Not config.EnableSearchConditionLogSheetOutput Then Exit Sub ' ★変更: O6で制御
+    If Not config.EnableSearchConditionLogSheetOutput Then Exit Sub ' Controlled by O6
 
-    On Error GoTo ErrorHandler
-
-    If Trim(config.SearchConditionLogSheetName) = "" Then
-        Call WriteErrorLog("WARNING", MODULE_NAME, funcName, "検索条件ログシート名が設定されていません。ログ記録をスキップします。")
-        Exit Sub
-    End If
-
-    On Error Resume Next
+    On Error GoTo ErrorHandler_WriteFilterLog
     Set wsLog = wb.Sheets(config.SearchConditionLogSheetName)
-    On Error GoTo ErrorHandler
-
     If wsLog Is Nothing Then
         Call WriteErrorLog("ERROR", MODULE_NAME, funcName, "検索条件ログシート「" & config.SearchConditionLogSheetName & "」が見つかりません。")
         Exit Sub
@@ -88,52 +77,125 @@ Public Sub WriteFilterLog(ByRef config As tConfigSettings, ByVal wb As Workbook)
     End If
     If nextLogWriteRow <= 0 Then nextLogWriteRow = 1
 
-    ' マクロ基本情報
-    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "マクロ実行開始時刻", CStr(config.StartTime))
-    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "マクロファイル", config.ScriptFullName)
-    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "設定ファイルシート", config.ConfigSheetFullName)
-    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "デバッグモード", CStr(config.DebugModeFlag))
-
-    ' A. 一般設定
-    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "A.デフォルトフォルダパス", config.DefaultFolderPath)
-    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "A.抽出結果出力シート名", config.OutputSheetName)
-    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "A.工程パターンデータ取得方法", IIf(config.GetPatternDataMethod, "数式", "VBA"))
-
-    ' B. 工程表ファイル設定
-    If General_IsArrayInitialized(config.TargetSheetNames) Then
-        Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "B.検索対象シート名リスト", config.TargetSheetNames)
-    End If
-    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "B.工程表ヘッダー行数", CStr(config.HeaderRowCount))
-    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "B.1日の工程数", CStr(config.ProcessesPerDay))
-
-
-    ' D. フィルタ条件
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "--- D. フィルター条件 ---", "開始")
     Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "D.作業員フィルター検索論理", config.WorkerFilterLogic)
     If General_IsArrayInitialized(config.WorkerFilterList) Then
         Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "D.作業員フィルターリスト", config.WorkerFilterList)
     End If
+    If General_IsArrayInitialized(config.Kankatsu1FilterList) Then
+        Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "D.管内1フィルターリスト", config.Kankatsu1FilterList)
+    End If
+    If General_IsArrayInitialized(config.Kankatsu2FilterList) Then
+        Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "D.管内2フィルターリスト", config.Kankatsu2FilterList)
+    End If
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "D.分類1フィルター", config.Bunrui1Filter)
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "D.分類2フィルター", config.Bunrui2Filter)
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "D.分類3フィルター", config.Bunrui3Filter)
+    If General_IsArrayInitialized(config.KoujiShuruiFilterList) Then
+        Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "D.工事種類フィルターリスト", config.KoujiShuruiFilterList)
+    End If
+    If General_IsArrayInitialized(config.KoubanFilterList) Then
+        Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "D.工番フィルターリスト", config.KoubanFilterList)
+    End If
+    If General_IsArrayInitialized(config.SagyoushuruiFilterList) Then
+        Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "D.作業種類フィルターリスト", config.SagyoushuruiFilterList)
+    End If
+    If General_IsArrayInitialized(config.TantouFilterList) Then
+        Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "D.担当の名前フィルターリスト", config.TantouFilterList)
+    End If
     Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "D.人数フィルター", config.NinzuFilter & IIf(config.IsNinzuFilterOriginallyEmpty, " (元々空)", ""))
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "D.作業箇所の種類フィルター", config.SagyouKashoKindFilter)
+    If General_IsArrayInitialized(config.SagyouKashoFilterList) Then
+        Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "D.作業箇所フィルターリスト", config.SagyouKashoFilterList)
+    End If
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "--- D. フィルター条件 ---", "終了")
 
-    ' E. 処理対象ファイル定義
+    Call WriteErrorLog("INFORMATION", MODULE_NAME, funcName, "フィルター条件ログの書き込みが完了しました。")
+    Exit Sub
+ErrorHandler_WriteFilterLog:
+    Call WriteErrorLog("ERROR", MODULE_NAME, funcName, "フィルター条件ログ書き込み中にエラー。", Err.Number, Err.Description)
+End Sub
+
+' Public Sub: WriteOperationLog (New procedure for general operational logs)
+Public Sub WriteOperationLog(ByRef config As tConfigSettings, ByVal wb As Workbook, Optional eventName As String = "", Optional eventDetail As String = "")
+    Dim funcName As String: funcName = "WriteOperationLog"
+    Dim wsLog As Worksheet
+    Dim nextLogWriteRow As Long
+    Dim i As Long ' Loop counter
+
+    If Not config.EnableSheetLogging Then Exit Sub ' Controlled by O5
+
+    On Error GoTo ErrorHandler_WriteOperationLog
+    Set wsLog = wb.Sheets(config.LogSheetName) ' Output to Generic Log sheet (O42)
+    If wsLog Is Nothing Then
+        Call WriteErrorLog("ERROR", MODULE_NAME, funcName, "汎用ログシート「" & config.LogSheetName & "」が見つかりません。")
+        Exit Sub
+    End If
+
+    If Application.WorksheetFunction.CountA(wsLog.Rows(1)) = 0 Then
+         nextLogWriteRow = 1
+    Else
+         nextLogWriteRow = wsLog.Cells(Rows.Count, "A").End(xlUp).Row + 1
+    End If
+    If nextLogWriteRow <= 0 Then nextLogWriteRow = 1
+
+    ' If eventName is provided, log it as a specific event
+    If eventName <> "" Then
+        Call WriteFilterLogEntry(wsLog, nextLogWriteRow, eventName, eventDetail) ' Using WriteFilterLogEntry for simplicity, adapt if needed
+        Exit Sub ' For specific events, we don't log all settings again
+    End If
+
+    ' Initial logging of settings (Sections A, B, C, E, G)
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "--- マクロ基本情報 ---", "開始")
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "マクロ実行開始時刻", CStr(config.startTime))
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "マクロファイル", config.ScriptFullName)
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "設定ファイルシート", config.ConfigSheetFullName)
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "デバッグモードフラグ(O3)", CStr(config.DebugModeFlag))
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "詳細トレースデバッグ(O4)", CStr(config.TraceDebugEnabled))
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "--- マクロ基本情報 ---", "終了")
+
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "--- A. 一般設定 (抜粋) ---", "開始")
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "A.デフォルトフォルダパス(O12)", config.DefaultFolderPath)
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "A.抽出結果出力シート名(O43)", config.OutputSheetName)
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "A.工程パターンデータ取得方法(O122)", IIf(config.GetPatternDataMethod, "数式", "VBA"))
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "--- A. 一般設定 (抜粋) ---", "終了")
+
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "--- B. 工程表ファイル内 設定 ---", "開始")
+    If General_IsArrayInitialized(config.TargetSheetNames) Then
+        Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "B.検索対象シート名リスト(O66-O75)", config.TargetSheetNames)
+    End If
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "B.工程表ヘッダー行数(O87)", CStr(config.HeaderRowCount))
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "B.1日の工程数(O114)", CStr(config.ProcessesPerDay))
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "--- B. 工程表ファイル内 設定 ---", "終了")
+
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "--- C. 工程パターン定義 (抜粋) ---", "開始")
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "C.現在処理中パターン識別子(O126)", config.CurrentPatternIdentifier)
+     If General_IsArrayInitialized(config.ProcessColCountSheetHeaders) Then
+        Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "C.工程列数定義シートヘッダー(O128-X128)", config.ProcessColCountSheetHeaders)
+    End If
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "--- C. 工程パターン定義 (抜粋) ---", "終了")
+
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "--- E. 処理対象ファイル定義 ---", "開始")
     If General_IsArrayInitialized(config.TargetFileFolderPaths) Then
-         Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "E.処理対象ファイル/フォルダパスリスト", config.TargetFileFolderPaths)
+         Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "E.処理対象ファイル/フォルダパスリスト(P557-P756)", config.TargetFileFolderPaths)
     End If
     If General_IsArrayInitialized(config.FilePatternIdentifiers) Then
-         Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "E.適用工程パターン識別子リスト", config.FilePatternIdentifiers)
+         Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "E.適用工程パターン識別子リスト(Q557-Q756)", config.FilePatternIdentifiers)
     End If
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "--- E. 処理対象ファイル定義 ---", "終了")
 
-    ' G. 出力シート設定
-    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "G.出力データオプション", config.OutputDataOption)
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "--- G. 出力シート設定 ---", "開始")
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "G.出力シートヘッダー行数(O811)", CStr(config.OutputHeaderRowCount))
     If General_IsArrayInitialized(config.OutputHeaderContents) Then
-         Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "G.出力シートヘッダー内容", config.OutputHeaderContents)
+         Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "G.出力シートヘッダー内容(O812-O821)", config.OutputHeaderContents)
     End If
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "G.出力データオプション(O1124)", config.OutputDataOption)
+    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "--- G. 出力シート設定 ---", "終了")
 
-    ' ログ書き込み完了メッセージ (エラーログへ)
-    Call WriteErrorLog("INFORMATION", MODULE_NAME, funcName, "検索条件ログの書き込みが完了しました。")
+    Call WriteErrorLog("INFORMATION", MODULE_NAME, funcName, "汎用動作ログの初期書き込みが完了しました。")
     Exit Sub
-
-ErrorHandler:
-    Call WriteErrorLog("ERROR", MODULE_NAME, funcName, "検索条件ログ書き込み中にエラー。", Err.Number, Err.Description)
+ErrorHandler_WriteOperationLog:
+    Call WriteErrorLog("ERROR", MODULE_NAME, funcName, "汎用動作ログ書き込み中にエラー。", Err.Number, Err.Description)
 End Sub
 
 ' Private Sub: WriteFilterLogEntry

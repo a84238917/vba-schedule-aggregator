@@ -63,69 +63,85 @@ Public Sub ExtractDataMain()
 
     ' --- Phase 3: Prepare Remaining Log Sheets and Initial Log Entries ---
     Call M03_SheetManager.PrepareRemainingLogSheets(g_configSettings, ThisWorkbook)
-    Call M04_LogWriter.WriteFilterLog(g_configSettings, ThisWorkbook) ' FilterLog uses EnableSheetLogging flag internally
+
+    ' ★ Call new WriteOperationLog for general settings
+    Call M04_LogWriter.WriteOperationLog(g_configSettings, ThisWorkbook)
+    ' ★ Call revised WriteFilterLog for D-Section filter settings
+    Call M04_LogWriter.WriteFilterLog(g_configSettings, ThisWorkbook)
 
     ' --- Phase 4: Main Data Extraction Loop ---
-    Dim i As Long
-    Dim fileSystemObj As Object ' FileSystemObject
+    Dim k As Long ' Changed loop variable from i to k to avoid conflict if i is used elsewhere
+    Dim fileSystemObj As Object
     Set fileSystemObj = CreateObject("Scripting.FileSystemObject")
     Dim targetPath As String
-    Dim currentFile As Object ' File object
-    Dim filesInFolder As Object ' Files collection
-    Dim targetPattern As String ' 各ファイル/フォルダに対応する工程パターン識別子
+    Dim currentFile As Object
+    Dim filesInFolder As Object
+    Dim targetPattern As String
 
-    If Not General_IsArrayInitialized(g_configSettings.TargetFileFolderPaths) Then
+    Call M04_LogWriter.WriteErrorLog("DEBUG_POINT", "MainControl", "ExtractDataMain", "処理対象ファイルループ開始前。TargetFileFolderPaths IsArray: " & IsArray(g_configSettings.TargetFileFolderPaths) & ", Initialized: " & General_IsArrayInitialized(g_configSettings.TargetFileFolderPaths))
+    If General_IsArrayInitialized(g_configSettings.TargetFileFolderPaths) Then
+         Call M04_LogWriter.WriteErrorLog("DEBUG_POINT", "MainControl", "ExtractDataMain", "TargetFileFolderPaths LBound: " & LBound(g_configSettings.TargetFileFolderPaths) & ", UBound: " & UBound(g_configSettings.TargetFileFolderPaths))
+    End If
+
+
+    If Not General_IsArrayInitialized(g_configSettings.TargetFileFolderPaths) Or _
+       (LBound(g_configSettings.TargetFileFolderPaths) > UBound(g_configSettings.TargetFileFolderPaths)) Then ' Check if array is empty
         Call M04_LogWriter.WriteErrorLog("INFORMATION", "MainControl", "ExtractDataMain", "処理対象ファイル/フォルダパスリスト(TargetFileFolderPaths)が空または未初期化です。処理をスキップします。")
         MsgBox "処理対象のファイルまたはフォルダが設定されていません。", vbInformation, "情報"
         GoTo FinalizeRoutine_ExtractDataMain
     End If
 
-    For i = LBound(g_configSettings.TargetFileFolderPaths) To UBound(g_configSettings.TargetFileFolderPaths)
-        targetPath = Trim(g_configSettings.TargetFileFolderPaths(i))
+    For k = LBound(g_configSettings.TargetFileFolderPaths) To UBound(g_configSettings.TargetFileFolderPaths)
+        Call M04_LogWriter.WriteErrorLog("DEBUG_POINT", "MainControl", "ExtractDataMain", "ループ開始。インデックス k = " & k)
+        targetPath = Trim(g_configSettings.TargetFileFolderPaths(k))
+        Call M04_LogWriter.WriteErrorLog("DEBUG_POINT", "MainControl", "ExtractDataMain", "targetPath = " & targetPath)
 
-        ' 対応する工程パターン識別子を取得
+
         If General_IsArrayInitialized(g_configSettings.FilePatternIdentifiers) And _
-           i >= LBound(g_configSettings.FilePatternIdentifiers) And _
-           i <= UBound(g_configSettings.FilePatternIdentifiers) Then
-            targetPattern = Trim(g_configSettings.FilePatternIdentifiers(i))
+           k >= LBound(g_configSettings.FilePatternIdentifiers) And _
+           k <= UBound(g_configSettings.FilePatternIdentifiers) Then
+            targetPattern = Trim(g_configSettings.FilePatternIdentifiers(k))
         Else
-            targetPattern = "" ' デフォルトまたはエラーケース
-            Call M04_LogWriter.WriteErrorLog("WARNING", "MainControl", "ExtractDataMain", "工程パターン識別子リスト(FilePatternIdentifiers)の要素数が不足しているか、インデックス" & i & "に対応する値がありません。デフォルトのパターンを使用します（またはエラー処理）。")
+            targetPattern = ""
+            Call M04_LogWriter.WriteErrorLog("WARNING", "MainControl", "ExtractDataMain", "工程パターン識別子リスト(FilePatternIdentifiers)のインデックス" & k & "に対応する値なし。")
         End If
-
-        g_configSettings.CurrentPatternIdentifier = targetPattern ' 現在処理中のファイルのパターンを設定
+        Call M04_LogWriter.WriteErrorLog("DEBUG_POINT", "MainControl", "ExtractDataMain", "targetPattern = " & targetPattern)
+        g_configSettings.CurrentPatternIdentifier = targetPattern
 
         If targetPath = "" Then
-            Call M04_LogWriter.WriteErrorLog("WARNING", "MainControl", "ExtractDataMain", "処理対象パスが空です。スキップします。(インデックス: " & i & ")")
-            GoTo NextIteration ' ループの次の反復へ
+            Call M04_LogWriter.WriteErrorLog("WARNING", "MainControl", "ExtractDataMain", "処理対象パスが空。スキップ。(インデックス: " & k & ")")
+            GoTo NextIteration_ExtractDataMain ' Ensure this label exists or create it
         End If
 
+        Call M04_LogWriter.WriteErrorLog("DEBUG_POINT", "MainControl", "ExtractDataMain", "ファイル/フォルダ存在確認前: " & targetPath)
         If fileSystemObj.FolderExists(targetPath) Then
+            Call M04_LogWriter.WriteErrorLog("DEBUG_POINT", "MainControl", "ExtractDataMain", "フォルダ処理開始: " & targetPath)
             Set filesInFolder = fileSystemObj.GetFolder(targetPath).Files
             If filesInFolder.Count = 0 Then
                 Call M04_LogWriter.WriteErrorLog("INFORMATION", "MainControl", "ExtractDataMain", "対象フォルダにファイルが存在しません: " & targetPath)
-                GoTo NextIteration
+                GoTo NextIteration_ExtractDataMain
             End If
             For Each currentFile In filesInFolder
+                Call M04_LogWriter.WriteErrorLog("DEBUG_POINT", "MainControl", "ExtractDataMain", "フォルダ内ファイル処理: " & currentFile.Path)
                 If IsSupportedExcelFile(currentFile.Path, fileSystemObj) Then
-                    ' M06_DataExtractor.ExtractDataFromFile は g_configSettings と ThisWorkbook を引数に取るように変更想定
                     Call M06_DataExtractor.ExtractDataFromFile(currentFile.Path, g_configSettings, ThisWorkbook)
                 Else
-                    Call M04_LogWriter.WriteErrorLog("INFORMATION", "MainControl", "ExtractDataMain", "サポート外のファイル形式です（フォルダ内）: " & currentFile.Path)
+                    Call M04_LogWriter.WriteErrorLog("INFORMATION", "MainControl", "ExtractDataMain", "サポート外ファイル(フォルダ内): " & currentFile.Path)
                 End If
             Next currentFile
         ElseIf fileSystemObj.FileExists(targetPath) Then
+            Call M04_LogWriter.WriteErrorLog("DEBUG_POINT", "MainControl", "ExtractDataMain", "個別ファイル処理開始: " & targetPath)
              If IsSupportedExcelFile(targetPath, fileSystemObj) Then
-                ' M06_DataExtractor.ExtractDataFromFile は g_configSettings と ThisWorkbook を引数に取るように変更想定
                 Call M06_DataExtractor.ExtractDataFromFile(targetPath, g_configSettings, ThisWorkbook)
             Else
-                Call M04_LogWriter.WriteErrorLog("INFORMATION", "MainControl", "ExtractDataMain", "サポート外のファイル形式です（個別ファイル）: " & targetPath)
+                Call M04_LogWriter.WriteErrorLog("INFORMATION", "MainControl", "ExtractDataMain", "サポート外ファイル(個別): " & targetPath)
             End If
         Else
-            Call M04_LogWriter.WriteErrorLog("ERROR", "MainControl", "ExtractDataMain", "指定されたパスが見つかりません: " & targetPath)
+            Call M04_LogWriter.WriteErrorLog("ERROR", "MainControl", "ExtractDataMain", "指定パス見つからず: " & targetPath)
         End If
-NextIteration:
-    Next i
+NextIteration_ExtractDataMain: ' Label for GoTo
+    Next k
+    Call M04_LogWriter.WriteErrorLog("DEBUG_POINT", "MainControl", "ExtractDataMain", "ファイル処理ループ終了。")
 
     ' 5. 完了処理
     Dim endTime As Date
