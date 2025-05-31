@@ -17,13 +17,11 @@ Public Sub WriteErrorLog(ByVal errorLevel As String, ByVal moduleN As String, By
 
     ' ▼▼▼ Extended Debug.Print statements ▼▼▼
     Debug.Print Now & " M04.WriteErrorLog: ENTER. errorLevel='" & errorLevel & "', isDebugLog=" & isDebugLog
-    If Not g_configSettings Is Nothing Then
-        Debug.Print Now & " M04.WriteErrorLog: Config Flags: EnableSheetLogging(O5)=" & g_configSettings.EnableSheetLogging & _
-                      ", EnableErrorLogSheetOutput(O7)=" & g_configSettings.EnableErrorLogSheetOutput & _
-                      ", DebugDetailLevel1Enabled(O4)=" & g_configSettings.DebugDetailLevel1Enabled
-    Else
-        Debug.Print Now & " M04.WriteErrorLog: g_configSettings is Nothing (should not happen if called after MainControl init)."
-    End If
+
+    ' This Debug.Print line is now unconditional
+    Debug.Print Now & " M04.WriteErrorLog: Config Flags: EnableSheetLogging(O5)=" & g_configSettings.EnableSheetLogging & _
+                  ", EnableErrorLogSheetOutput(O7)=" & g_configSettings.EnableErrorLogSheetOutput & _
+                  ", DebugDetailLevel1Enabled(O4)=" & g_configSettings.DebugDetailLevel1Enabled
 
     If isDebugLog Then
         Debug.Print Now & " M04.WriteErrorLog: DEBUG log detected. Attempting to target GenericLogSheet."
