@@ -62,7 +62,7 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
         If Err.Number <> 0 Then Call M02Reader_LogAndSetError(MODULE_NAME, funcName, "LoadScheduleFileSettings", Err.Number, Err.Description)
         If m_errorOccurred Then GoTo FinalConfigCheck_LoadConfig
 
-        Call LoadProcessPatternDefinition(configStruct, wsConfig) ' UNCOMMENTED
+        Call LoadProcessPatternDefinition(configStruct, wsConfig)
         If Err.Number <> 0 Then Call M02Reader_LogAndSetError(MODULE_NAME, funcName, "LoadProcessPatternDefinition", Err.Number, Err.Description)
         If m_errorOccurred Then GoTo FinalConfigCheck_LoadConfig
 
@@ -70,7 +70,7 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
         If Err.Number <> 0 Then Call M02Reader_LogAndSetError(MODULE_NAME, funcName, "LoadFilterConditions", Err.Number, Err.Description)
         If m_errorOccurred Then GoTo FinalConfigCheck_LoadConfig
 
-        Call LoadTargetFileDefinition(configStruct, wsConfig) ' UNCOMMENTED
+        Call LoadTargetFileDefinition(configStruct, wsConfig)
         If Err.Number <> 0 Then Call M02Reader_LogAndSetError(MODULE_NAME, funcName, "LoadTargetFileDefinition", Err.Number, Err.Description)
         If m_errorOccurred Then GoTo FinalConfigCheck_LoadConfig
 
@@ -150,7 +150,7 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
         If outputOpt = "リセット" Or outputOpt = "追記" Then configStruct.OutputDataOption = outputOpt Else configStruct.OutputDataOption = "リセット"
         configStruct.HideSheetMethod = Trim(CStr(wsConfig.Range("O1126").Value))
 
-        Dim currentItemContext As String ' Renamed for clarity in G-section
+        Dim currentItemContext As String
         currentItemContext = "HideSheetNames (O1127:O1146)"
         rawHideSheetNames = ReadRangeToArray(wsConfig, "O1127:O1146", MODULE_NAME, funcName, currentItemContext)
         configStruct.HideSheetNames = ConvertRawVariantToStringArray(rawHideSheetNames, MODULE_NAME, funcName, currentItemContext)
@@ -163,18 +163,36 @@ FinalConfigCheck_LoadConfig:
         If Err.Number = 0 Then Call M04_LogWriter.WriteErrorLog("CRITICAL", MODULE_NAME, funcName, "設定読み込み中にエラーが発生しました。詳細は直前のログを確認してください。") Else Call M04_LogWriter.WriteErrorLog("CRITICAL", MODULE_NAME, funcName, "設定読み込み中にエラーが発生しました (伝播または新規)。", Err.Number, Err.Description)
         LoadConfiguration = False
     Else
-        If configStruct.DebugDetailLevel3Enabled Then ' Changed from DebugModeFlag to DebugDetailLevel3Enabled
+        If configStruct.DebugDetailLevel3Enabled Then
             Dim dbgFSectionPrintIdx As Long, dbgGHeaderPrintIdx As Long
             Debug.Print "--- Loaded Configuration Settings (M02_ConfigReader) ---"
             Debug.Print "F. IsOffsetDefinitionsValid: " & configStruct.IsOffsetDefinitionsValid
-            If configStruct.IsOffsetDefinitionsValid And General_IsArrayInitialized(configStruct.OffsetItemMasterNames) And UBound(configStruct.OffsetItemMasterNames) >= LBound(configStruct.OffsetItemMasterNames) Then
-                 For dbgFSectionPrintIdx = LBound(configStruct.OffsetItemMasterNames) To UBound(configStruct.OffsetItemMasterNames)
-                    Debug.Print "  F Item " & dbgFSectionPrintIdx & ". Name: '" & configStruct.OffsetItemMasterNames(dbgFSectionPrintIdx) & _
+
+            Dim hasFSectionItemsToPrint As Boolean
+            hasFSectionItemsToPrint = False
+            If IsArray(configStruct.OffsetItemMasterNames) Then
+                If LBound(configStruct.OffsetItemMasterNames) <= UBound(configStruct.OffsetItemMasterNames) Then
+                    If Not (LBound(configStruct.OffsetItemMasterNames) = 1 And UBound(configStruct.OffsetItemMasterNames) = 0) Then
+                        hasFSectionItemsToPrint = True
+                    End If
+                End If
+            End If
+
+            If hasFSectionItemsToPrint Then
+                Debug.Print "  F. Extraction Data Offsets (Loaded " & UBound(configStruct.OffsetItemMasterNames) & " named items):"
+                For dbgFSectionPrintIdx = LBound(configStruct.OffsetItemMasterNames) To UBound(configStruct.OffsetItemMasterNames)
+                    Debug.Print "    Item " & dbgFSectionPrintIdx & ". Name: '" & configStruct.OffsetItemMasterNames(dbgFSectionPrintIdx) & _
                                   "', Offset: R=" & configStruct.OffsetDefinitions(dbgFSectionPrintIdx).Row & ", C=" & configStruct.OffsetDefinitions(dbgFSectionPrintIdx).Col & _
                                   ", IsEmptyOrig: " & configStruct.IsOffsetOriginallyEmptyFlags(dbgFSectionPrintIdx)
                 Next dbgFSectionPrintIdx
-            ElseIf configStruct.IsOffsetDefinitionsValid Then Debug.Print "  F. No Offset Items Loaded." Else Debug.Print "  F. Offset Definitions are NOT valid."
+            Else
+                If configStruct.IsOffsetDefinitionsValid Then
+                    Debug.Print "  F. No Offset Items Loaded (OffsetItemMasterNames is empty, but OffsetDefinitions structure was marked valid)."
+                Else
+                    Debug.Print "  F. No Offset Items Loaded (OffsetItemMasterNames is empty, and OffsetDefinitions structure was NOT marked valid or no items defined)."
+                End If
             End If
+
             Debug.Print "G-1. OutputHeaderRowCount: " & configStruct.OutputHeaderRowCount
             If configStruct.OutputHeaderRowCount > 0 And General_IsArrayInitialized(configStruct.OutputHeaderContents) Then
                 For dbgGHeaderPrintIdx = 1 To configStruct.OutputHeaderRowCount
@@ -623,3 +641,5 @@ Private Sub LogErrorAndSetOccurredFlag(ByVal moduleN As String, ByVal callerProc
     Call M04_LogWriter.WriteErrorLog("ERROR", moduleN, callerProcName, failedSubName & " からエラーが伝播 (または新規発生)。", errNum, errDesc)
     ' Do not Clear Err here, let LoadConfiguration handle it or GoTo
 End Sub
+
+[end of M02_ConfigReader.bas]
