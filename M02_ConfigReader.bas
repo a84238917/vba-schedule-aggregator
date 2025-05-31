@@ -534,6 +534,7 @@ ReadRangeErrorHandler:
 End Function
 
 Private Function ConvertRawVariantToStringArray(ByVal rawData As Variant, ByVal moduleN As String, ByVal funcN_from_caller As String, ByVal itemName As String, ByRef currentConfig As tConfigSettings) As String()
+    Dim tempList() As String ' ★ Re-introduced
     Dim i As Long, r As Long
     Dim count As Long
     Dim lBound1 As Long, uBound1 As Long, lBound2 As Long, uBound2 As Long
@@ -541,10 +542,8 @@ Private Function ConvertRawVariantToStringArray(ByVal rawData As Variant, ByVal 
     Dim localFuncName As String
     localFuncName = "ConvertRawVariantToStringArray"
 
-    ' Initialize to an empty array (1 To 0)
-    ReDim ConvertRawVariantToStringArray(1 To 0)
-
-    On Error GoTo ErrorHandler_CVTSA_Direct ' Renamed error handler
+    ReDim tempList(1 To 0) ' ★ Initialize tempList
+    On Error GoTo ErrorHandler_CVTSA_Direct
 
     If currentConfig.DebugDetailLevel2Enabled Then
         tempMsg = "START for item: '" & itemName & "' (called by " & funcN_from_caller & "). TypeName(rawData): " & TypeName(rawData)
@@ -553,15 +552,15 @@ Private Function ConvertRawVariantToStringArray(ByVal rawData As Variant, ByVal 
 
     If IsEmpty(rawData) Then
         If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - rawData is Empty (called by " & funcN_from_caller & "). Returning empty array (1 To 0).")
-        ' Already ReDim'd to (1 To 0)
+        ' tempList is already (1 To 0)
     ElseIf Not IsArray(rawData) Then
         If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - rawData is Scalar (called by " & funcN_from_caller & "). Value: '" & CStr(rawData) & "'")
         If Trim(CStr(rawData)) <> "" Then
-            ReDim ConvertRawVariantToStringArray(1 To 1)
-            ConvertRawVariantToStringArray(1) = Trim(CStr(rawData))
+            ReDim tempList(1 To 1) ' ★ Target tempList
+            tempList(1) = Trim(CStr(rawData)) ' ★ Target tempList
             If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - Scalar converted to 1-element array (called by " & funcN_from_caller & ").")
         Else
-            ' Already ReDim'd to (1 To 0)
+            ' tempList is already (1 To 0)
             If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - Scalar is empty (called by " & funcN_from_caller & "). Returning empty array (1 To 0).")
         End If
     Else ' IsArray(rawData) is True
@@ -577,10 +576,10 @@ Private Function ConvertRawVariantToStringArray(ByVal rawData As Variant, ByVal 
             dbg_l1 = "Err:" & Err.Description: dbg_u1 = "Err:" & Err.Description
             If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - Error getting 1st dim bounds (called by " & funcN_from_caller & "): " & Err.Description)
             Err.Clear
-            GoTo InvalidArrayStructure_CVTSA_Direct ' Renamed GoTo Label
+            GoTo InvalidArrayStructure_CVTSA_Direct
         End If
 
-        lBound2 = LBound(rawData, 2): dbg_l2 = CStr(lBound2) ' Attempt to get 2nd dimension
+        lBound2 = LBound(rawData, 2): dbg_l2 = CStr(lBound2)
         uBound2 = UBound(rawData, 2): dbg_u2 = CStr(uBound2)
         If Err.Number = 0 Then
             numDimensions = 2
@@ -590,71 +589,73 @@ Private Function ConvertRawVariantToStringArray(ByVal rawData As Variant, ByVal 
             Err.Clear
             If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - Detected 1D Array (called by " & funcN_from_caller & "). Bounds: " & dbg_l1 & " To " & dbg_u1)
         End If
-        On Error GoTo ErrorHandler_CVTSA_Direct ' Restore specific error handler for this function (Renamed)
+        On Error GoTo ErrorHandler_CVTSA_Direct
 
         If numDimensions = 1 Then
             If uBound1 >= lBound1 Then
-                ReDim ConvertRawVariantToStringArray(1 To uBound1 - lBound1 + 1) ' Target 1-based
+                ReDim tempList(1 To uBound1 - lBound1 + 1) ' ★ Target tempList
                 count = 0
-                If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - 1D Loop (called by " & funcN_from_caller & "): " & lBound1 & " To " & uBound1 & ". Target ReDim'd to (1 To " & UBound(ConvertRawVariantToStringArray) & ")")
+                If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - 1D Loop (called by " & funcN_from_caller & "): " & lBound1 & " To " & uBound1 & ". tempList ReDim'd to (1 To " & UBound(tempList) & ")")
                 For i = lBound1 To uBound1
                     If currentConfig.DebugDetailLevel2Enabled Then tempMsg = itemName & " - 1D Loop i=" & i & " (called by " & funcN_from_caller & "), rawData(i)='" & CStr(rawData(i)) & "'"
                     If Not IsEmpty(rawData(i)) And Trim(CStr(rawData(i))) <> "" Then
                         count = count + 1
-                        ConvertRawVariantToStringArray(count) = Trim(CStr(rawData(i)))
-                        If currentConfig.DebugDetailLevel2Enabled Then tempMsg = tempMsg & " -> Added to Target(" & count & ")"
+                        tempList(count) = Trim(CStr(rawData(i))) ' ★ Target tempList
+                        If currentConfig.DebugDetailLevel2Enabled Then tempMsg = tempMsg & " -> Added to tempList(" & count & ")"
                     Else
                         If currentConfig.DebugDetailLevel2Enabled Then tempMsg = tempMsg & " -> Skipped (empty)"
                     End If
                     If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, tempMsg)
                 Next i
                 If count > 0 Then
-                    If count < UBound(ConvertRawVariantToStringArray) Then ReDim Preserve ConvertRawVariantToStringArray(1 To count)
-                    If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - 1D Loop END (called by " & funcN_from_caller & "). Final count: " & count & ". Target ReDim Preserve'd to (1 To " & UBound(ConvertRawVariantToStringArray) & ")")
+                    If count < UBound(tempList) Then ReDim Preserve tempList(1 To count) ' ★ Target tempList
+                    If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - 1D Loop END (called by " & funcN_from_caller & "). Final count: " & count & ". tempList ReDim Preserve'd to (1 To " & UBound(tempList) & ")")
                 Else
-                    ReDim ConvertRawVariantToStringArray(1 To 0)
-                    If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - 1D Loop END (called by " & funcN_from_caller & "). No non-empty items. Target ReDim'd to (1 To 0)")
+                    ReDim tempList(1 To 0) ' ★ Target tempList
+                    If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - 1D Loop END (called by " & funcN_from_caller & "). No non-empty items. tempList ReDim'd to (1 To 0)")
                 End If
-            End If ' Else: array like (1 To 0), already handled by initial ReDim to (1 To 0)
-        ElseIf numDimensions = 2 And lBound2 = 1 And uBound2 = 1 Then ' N rows x 1 column
+            End If
+        ElseIf numDimensions = 2 And lBound2 = 1 And uBound2 = 1 Then
             If uBound1 >= lBound1 Then
-                ReDim ConvertRawVariantToStringArray(1 To uBound1 - lBound1 + 1)
+                ReDim tempList(1 To uBound1 - lBound1 + 1) ' ★ Target tempList
                 count = 0
-                If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - 2D-Vertical Loop (called by " & funcN_from_caller & "): " & lBound1 & " To " & uBound1 & ". Target ReDim'd to (1 To " & UBound(ConvertRawVariantToStringArray) & ")")
+                If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - 2D-Vertical Loop (called by " & funcN_from_caller & "): " & lBound1 & " To " & uBound1 & ". tempList ReDim'd to (1 To " & UBound(tempList) & ")")
                 For r = lBound1 To uBound1
                     If currentConfig.DebugDetailLevel2Enabled Then tempMsg = itemName & " - 2D Loop r=" & r & " (called by " & funcN_from_caller & "), rawData(r,1)='" & CStr(rawData(r, lBound2)) & "'"
                     If Not IsEmpty(rawData(r, lBound2)) And Trim(CStr(rawData(r, lBound2))) <> "" Then
                         count = count + 1
-                        ConvertRawVariantToStringArray(count) = Trim(CStr(rawData(r, lBound2)))
-                        If currentConfig.DebugDetailLevel2Enabled Then tempMsg = tempMsg & " -> Added to Target(" & count & ")"
+                        tempList(count) = Trim(CStr(rawData(r, lBound2))) ' ★ Target tempList
+                        If currentConfig.DebugDetailLevel2Enabled Then tempMsg = tempMsg & " -> Added to tempList(" & count & ")"
                     Else
                         If currentConfig.DebugDetailLevel2Enabled Then tempMsg = tempMsg & " -> Skipped (empty)"
                     End If
                     If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, tempMsg)
                 Next r
                 If count > 0 Then
-                    If count < UBound(ConvertRawVariantToStringArray) Then ReDim Preserve ConvertRawVariantToStringArray(1 To count)
-                    If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - 2D Loop END (called by " & funcN_from_caller & "). Final count: " & count & ". Target ReDim Preserve'd to (1 To " & UBound(ConvertRawVariantToStringArray) & ")")
+                    If count < UBound(tempList) Then ReDim Preserve tempList(1 To count) ' ★ Target tempList
+                    If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - 2D Loop END (called by " & funcN_from_caller & "). Final count: " & count & ". tempList ReDim Preserve'd to (1 To " & UBound(tempList) & ")")
                 Else
-                    ReDim ConvertRawVariantToStringArray(1 To 0)
-                    If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - 2D Loop END (called by " & funcN_from_caller & "). No non-empty items. Target ReDim'd to (1 To 0)")
+                    ReDim tempList(1 To 0) ' ★ Target tempList
+                    If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - 2D Loop END (called by " & funcN_from_caller & "). No non-empty items. tempList ReDim'd to (1 To 0)")
                 End If
-            End If ' Else: array like (1 To 0, 1 To 1), already handled
-        Else ' Not 1D and Not 2D-Vertical (or error determining bounds previously)
-InvalidArrayStructure_CVTSA_Direct: ' Renamed label
+            End If
+        Else
+InvalidArrayStructure_CVTSA_Direct:
             tempMsg = itemName & " - 予期しない配列構造または空の配列 (呼び出し元: " & funcN_from_caller & "). L1:" & dbg_l1 & ", U1:" & dbg_u1 & ", L2:" & dbg_l2 & ", U2:" & dbg_u2 & ". 空として扱います。"
             If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("WARNING_L2", moduleN, localFuncName, tempMsg)
-            Err.Clear ' Clear any error from LBound/UBound if we jumped here directly
-            ReDim ConvertRawVariantToStringArray(1 To 0) ' Ensure it's (1 To 0)
+            Err.Clear
+            ReDim tempList(1 To 0) ' ★ Target tempList
         End If
     End If
 
-    Exit Function ' Result is in ConvertRawVariantToStringArray itself
+    ConvertRawVariantToStringArray = tempList ' ★ Assign tempList to function return value at the end
+    Exit Function
 
-ErrorHandler_CVTSA_Direct: ' Renamed error handler
-    tempMsg = itemName & " の変換中に予期せぬエラー。 (呼び出し元: " & funcN_from_caller & ")" ' tempMsg is declared, this should be fine
+ErrorHandler_CVTSA_Direct:
+    tempMsg = itemName & " の変換中に予期せぬエラー。 (呼び出し元: " & funcN_from_caller & ")"
     Debug.Print Now & " CRITICAL_ERROR in " & localFuncName & ": " & tempMsg & " Err# " & Err.Number & " - " & Err.Description
-    ReDim ConvertRawVariantToStringArray(1 To 0) ' Return safe empty array
+    ReDim tempList(1 To 0) ' Ensure tempList is a safe empty array
+    ConvertRawVariantToStringArray = tempList ' ★ Assign safe tempList to function return value
 End Function
 
 Private Sub DebugPrintArrayState(ByRef arr As Variant, ByVal arrName As String, ByRef currentConfig As tConfigSettings)
