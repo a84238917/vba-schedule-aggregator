@@ -4,6 +4,7 @@ Option Explicit
 ' 主に LoadConfiguration 関数を通じて、M00_GlobalDeclarationsで定義された tConfigSettings 型の変数に値を設定します。
 
 Private Const MODULE_NAME As String = "M02_ConfigReader"
+Private m_errorOccurred As Boolean ' Module-level flag for LoadConfiguration
 
 ' --- Helper: ParseOffset (moved here from LoadConfiguration's F-Section in prompt for module-level visibility if needed, or keep private if only for LoadConfig)
 Private Function ParseOffset(offsetString As String, ByRef resultOffset As tOffset, ByRef overallErrorFlag As Boolean, callerProcName As String, itemDesc As String, ByVal wbForLog As Workbook, ByVal errorLogSheetNameForLog As String) As Boolean
@@ -45,10 +46,12 @@ End Function
 
 
 ' --- Public Functions ---
-Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal targetWorkbook As Workbook, ByVal configSheetName As String) As Boolean
+Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal targetWorkbook As Workbook, ByVal configSheetName_Unused As String) As Boolean ' Renamed param as it's now read from configStruct
     Dim wsConfig As Worksheet
     Dim funcName As String: funcName = "LoadConfiguration"
-    Dim m_errorOccurred As Boolean: m_errorOccurred = False ' Local error flag for this loading process
+    ' Dim m_errorOccurred As Boolean: m_errorOccurred = False ' Now a module-level variable
+    m_errorOccurred = False ' Initialize at the start
+
 
     ' Loop Counters
     Dim fSectionReadLoopIdx As Long
@@ -89,22 +92,34 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
 
     ' --- A. 一般設定 ---
     If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Reading Section A: General Settings"
-    Call LoadGeneralSettings(configStruct, wsConfig) ' Assuming this helper and others (B,C,D,E) remain for now.
+    Call LoadGeneralSettings(configStruct, wsConfig)
+    If Err.Number <> 0 Then m_errorOccurred = True: Call M04_LogWriter.WriteErrorLog("ERROR", MODULE_NAME, funcName, "LoadGeneralSettings からエラーが伝播。", Err.Number, Err.Description)
+    If m_errorOccurred Then GoTo FinalConfigCheck
 
     ' --- B. 工程表ファイル内 設定 ---
     Call LoadScheduleFileSettings(configStruct, wsConfig)
+    If Err.Number <> 0 Then m_errorOccurred = True: Call M04_LogWriter.WriteErrorLog("ERROR", MODULE_NAME, funcName, "LoadScheduleFileSettings からエラーが伝播。", Err.Number, Err.Description)
+    If m_errorOccurred Then GoTo FinalConfigCheck
 
     ' --- C. 工程パターン定義 ---
-    Call LoadProcessPatternDefinition(configStruct, wsConfig)
+    ' Call LoadProcessPatternDefinition(configStruct, wsConfig) ' ★ TEMPORARILY COMMENT OUT
+    ' If Err.Number <> 0 Then m_errorOccurred = True: Call M04_LogWriter.WriteErrorLog("ERROR", MODULE_NAME, funcName, "LoadProcessPatternDefinition からエラーが伝播。", Err.Number, Err.Description)
+    ' If m_errorOccurred Then GoTo FinalConfigCheck
 
     ' --- D. フィルタ条件 ---
-    Call LoadFilterConditions(configStruct, wsConfig)
+    Call LoadFilterConditions(configStruct, wsConfig) ' Focus on this one
+    If Err.Number <> 0 Then m_errorOccurred = True: Call M04_LogWriter.WriteErrorLog("ERROR", MODULE_NAME, funcName, "LoadFilterConditions からエラーが伝播。", Err.Number, Err.Description)
+    If m_errorOccurred Then GoTo FinalConfigCheck
 
     ' --- E. 処理対象ファイル定義 ---
-    Call LoadTargetFileDefinition(configStruct, wsConfig)
+    ' Call LoadTargetFileDefinition(configStruct, wsConfig) ' ★ TEMPORARILY COMMENT OUT
+    ' If Err.Number <> 0 Then m_errorOccurred = True: Call M04_LogWriter.WriteErrorLog("ERROR", MODULE_NAME, funcName, "LoadTargetFileDefinition からエラーが伝播。", Err.Number, Err.Description)
+    ' If m_errorOccurred Then GoTo FinalConfigCheck
 
 
     ' --- F. 抽出データオフセット定義 ---
+    ' The F-Section (Offset Definitions) does not use ReadRangeToArray for arrays directly.
+    ' It uses ParseOffset in a loop. Its own error handling for m_errorOccurred is already present.
     If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Reading Section F: Extraction Data Offset Definition (Array Method)"
     actualOffsetCount = 0
 
@@ -200,7 +215,7 @@ FinalConfigCheck: ' Label for potential GoTo from F-Section if error occurs
         configStruct.OutputDataOption = "リセット" ' Default
     End If
     configStruct.HideSheetMethod = Trim(CStr(wsConfig.Range("O1126").Value))
-    configStruct.HideSheetNames = ReadRangeToArray(wsConfig, "O1127:O1146", MODULE_NAME, funcName, "マクロ実行後非表示シートリスト")
+    ' configStruct.HideSheetNames = ReadRangeToArray(wsConfig, "O1127:O1146", MODULE_NAME, funcName, "マクロ実行後非表示シートリスト") ' ★ TEMPORARILY COMMENT OUT
 
 
     ' --- Final Debug Print ---
@@ -334,7 +349,12 @@ End Sub
 ' D. フィルタ条件 (O列)
 Private Sub LoadFilterConditions(ByRef config As tConfigSettings, ByVal ws As Worksheet)
     Dim funcName As String: funcName = "LoadFilterConditions"
-    Dim currentItem As String ' For logging which item caused an error
+    Dim currentItem As String
+    Dim rawData As Variant
+    Dim tempList() As String
+    Dim i As Long, r As Long ' Added r for row iteration
+    Dim count As Long
+    Dim lBound1 As Long, uBound1 As Long, lBound2 As Long, uBound2 As Long
 
     On Error GoTo ErrorHandler_LoadFilterConditions
 
@@ -342,54 +362,91 @@ Private Sub LoadFilterConditions(ByRef config As tConfigSettings, ByVal ws As Wo
     config.WorkerFilterLogic = ReadStringCell(ws, "O242", MODULE_NAME, funcName, "作業員フィルター検索論理", "AND")
 
     currentItem = "WorkerFilterList (O243:O262)"
-    config.WorkerFilterList = ReadRangeToArray(ws, "O243:O262", MODULE_NAME, funcName, "作業員フィルターリスト")
+    rawData = ReadRangeToArray(ws, "O243:O262", MODULE_NAME, funcName, "作業員フィルターリスト")
 
-    currentItem = "Kankatsu1FilterList (O275:O294)"
-    config.Kankatsu1FilterList = ReadRangeToArray(ws, "O275:O294", MODULE_NAME, funcName, "管内1フィルターリスト")
+    If IsEmpty(rawData) Then
+        ReDim config.WorkerFilterList(1 To 0)
+    ElseIf Not IsArray(rawData) Then
+        If Trim(CStr(rawData)) <> "" Then
+            ReDim config.WorkerFilterList(1 To 1)
+            config.WorkerFilterList(1) = Trim(CStr(rawData))
+        Else
+            ReDim config.WorkerFilterList(1 To 0)
+        End If
+    Else ' IsArray(rawData) is True
+        On Error Resume Next ' For LBound/UBound calls
+        lBound1 = LBound(rawData, 1)
+        uBound1 = UBound(rawData, 1)
+        lBound2 = LBound(rawData, 2) ' Attempt to get 2nd dimension
+        uBound2 = UBound(rawData, 2)
+        If Err.Number <> 0 Then ' It's a 1D array
+            Err.Clear
+            If uBound1 >= lBound1 Then
+                ReDim tempList(lBound1 To uBound1)
+                count = 0
+                For i = lBound1 To uBound1
+                    If Not IsEmpty(rawData(i)) And Trim(CStr(rawData(i))) <> "" Then
+                        count = count + 1
+                        tempList(count) = Trim(CStr(rawData(i)))
+                    End If
+                Next i
+                If count > 0 Then
+                    ReDim Preserve tempList(1 To count)
+                    config.WorkerFilterList = tempList
+                Else
+                    ReDim config.WorkerFilterList(1 To 0)
+                End If
+            Else ' Array like (1 To 0)
+                ReDim config.WorkerFilterList(1 To 0)
+            End If
+        Else ' It's a 2D array
+            If uBound1 >= lBound1 And uBound2 >= lBound2 Then
+                If lBound2 = 1 And uBound2 = 1 Then ' N rows x 1 column
+                    ReDim tempList(1 To uBound1 - lBound1 + 1)
+                    count = 0
+                    For r = lBound1 To uBound1
+                        If Not IsEmpty(rawData(r, 1)) And Trim(CStr(rawData(r, 1))) <> "" Then
+                            count = count + 1
+                            tempList(count) = Trim(CStr(rawData(r, 1)))
+                        End If
+                    Next r
+                    If count > 0 Then
+                        ReDim Preserve tempList(1 To count)
+                        config.WorkerFilterList = tempList
+                    Else
+                        ReDim config.WorkerFilterList(1 To 0)
+                    End If
+                Else ' Not a single column 2D array, treat as error for this list type
+                    Call M04_LogWriter.WriteErrorLog("WARNING", MODULE_NAME, funcName, currentItem & " - 予期しない2D配列構造。リストは空になります。")
+                    ReDim config.WorkerFilterList(1 To 0)
+                End If
+            Else ' Array like (1 To 0, 1 To 0)
+                ReDim config.WorkerFilterList(1 To 0)
+            End If
+        End If
+        On Error GoTo ErrorHandler_LoadFilterConditions ' Restore error handler
+    End If
+    ' --- TEMPORARILY COMMENT OUT OTHER LISTS FOR FOCUSED TESTING ---
+    ' currentItem = "Kankatsu1FilterList (O275:O294)"
+    ' config.Kankatsu1FilterList = ReadRangeToArray(ws, "O275:O294", MODULE_NAME, funcName, "管内1フィルターリスト")
+    ' ... (and so on for all other ReadRangeToArray calls in this sub)
 
-    currentItem = "Kankatsu2FilterList (O305:O334)"
-    config.Kankatsu2FilterList = ReadRangeToArray(ws, "O305:O334", MODULE_NAME, funcName, "管内2フィルターリスト")
+    ' --- Temporarily comment out string reads as well to isolate array issue ---
+    ' currentItem = "Bunrui1Filter (O346)"
+    ' config.Bunrui1Filter = ReadStringCell(ws, "O346", MODULE_NAME, funcName, "分類1フィルター")
+    ' ... (and so on for other ReadStringCell calls) ...
 
-    currentItem = "Bunrui1Filter (O346)"
-    config.Bunrui1Filter = ReadStringCell(ws, "O346", MODULE_NAME, funcName, "分類1フィルター")
+    ' currentItem = "NinzuFilter (O503)"
+    ' config.NinzuFilter = ReadStringCell(ws, "O503", MODULE_NAME, funcName, "人数フィルター")
+    ' config.IsNinzuFilterOriginallyEmpty = (Trim(config.NinzuFilter) = "")
+    ' currentItem = "SagyouKashoKindFilter (O514)"
+    ' config.SagyouKashoKindFilter = ReadStringCell(ws, "O514", MODULE_NAME, funcName, "作業箇所の種類フィルター")
 
-    currentItem = "Bunrui2Filter (O367)"
-    config.Bunrui2Filter = ReadStringCell(ws, "O367", MODULE_NAME, funcName, "分類2フィルター")
-
-    currentItem = "Bunrui3Filter (O388)"
-    config.Bunrui3Filter = ReadStringCell(ws, "O388", MODULE_NAME, funcName, "分類3フィルター")
-
-    currentItem = "KoujiShuruiFilterList (O409:O418)"
-    config.KoujiShuruiFilterList = ReadRangeToArray(ws, "O409:O418", MODULE_NAME, funcName, "工事種類フィルターリスト")
-
-    currentItem = "KoubanFilterList (O431:O440)"
-    config.KoubanFilterList = ReadRangeToArray(ws, "O431:O440", MODULE_NAME, funcName, "工番フィルターリスト")
-
-    currentItem = "SagyoushuruiFilterList (O451:O470)"
-    config.SagyoushuruiFilterList = ReadRangeToArray(ws, "O451:O470", MODULE_NAME, funcName, "作業種類フィルターリスト")
-
-    currentItem = "TantouFilterList (O481:O490)"
-    config.TantouFilterList = ReadRangeToArray(ws, "O481:O490", MODULE_NAME, funcName, "担当の名前フィルターリスト")
-
-    currentItem = "NinzuFilter (O503)"
-    config.NinzuFilter = ReadStringCell(ws, "O503", MODULE_NAME, funcName, "人数フィルター")
-    config.IsNinzuFilterOriginallyEmpty = (Trim(config.NinzuFilter) = "") ' This should be safe
-
-    currentItem = "SagyouKashoKindFilter (O514)"
-    config.SagyouKashoKindFilter = ReadStringCell(ws, "O514", MODULE_NAME, funcName, "作業箇所の種類フィルター")
-
-    currentItem = "SagyouKashoFilterList (O525:O544)"
-    config.SagyouKashoFilterList = ReadRangeToArray(ws, "O525:O544", MODULE_NAME, funcName, "作業箇所フィルターリスト")
-
-    Exit Sub ' Normal exit
+    Exit Sub ' Normal exit for this phase
 
 ErrorHandler_LoadFilterConditions:
-    Call M04_LogWriter.WriteErrorLog("ERROR", MODULE_NAME, funcName, "フィルター条件「" & currentItem & "」の読み込み中にエラー。", Err.Number, Err.Description)
-    ' Do not Resume or Exit Sub here, let the error propagate to LoadConfiguration's handler
-    ' This allows LoadConfiguration to set its m_errorOccurred flag and return False.
-    ' The error will be caught by On Error GoTo ErrorHandler_LoadConfiguration in the main LoadConfiguration function.
-    ' To ensure this propagation, we might need to Err.Raise Err.Number if LoadConfiguration's handler isn't reached otherwise.
-    ' For now, rely on standard VBA error bubbling up from a sub without its own Resume/Exit in the handler.
+    Call M04_LogWriter.WriteErrorLog("ERROR", MODULE_NAME, funcName, "フィルター条件「" & currentItem & "」の処理中にエラー。", Err.Number, Err.Description)
+    ' Propagate error by not handling it with Resume or Exit Sub
 End Sub
 
 ' E. 処理対象ファイル定義 (P, Q列)
@@ -479,114 +536,17 @@ Private Function ReadBoolCell(ws As Worksheet, addr As String, moduleN As String
     On Error GoTo 0
 End Function
 
-Private Function ReadRangeToArray(ws As Worksheet, rangeAddress As String, moduleN As String, funcN As String, itemName As String) As String()
+Private Function ReadRangeToArray(ws As Worksheet, rangeAddress As String, moduleN As String, funcN As String, itemName As String) As Variant
     Dim data As Variant
-    Dim result() As String
-    Dim r As Long ' Loop counter for rows
-    Dim numRowsOrElements As Long
-    Dim nonEmptyCount As Long
-    nonEmptyCount = 0
-
     On Error GoTo ReadRangeErrorHandler
 
-    ' 1. Read data from range
     data = ws.Range(rangeAddress).value
-
-    ' 2. Process data based on its type (scalar, 1D array, 2D array)
-    If Not IsArray(data) Then
-        ' Data is a single value (scalar)
-        If Not IsEmpty(data) And Trim(CStr(data)) <> "" Then
-            ReDim result(1 To 1)
-            result(1) = Trim(CStr(data))
-            nonEmptyCount = 1
-        Else
-            ' Single cell is empty or only whitespace
-            ReDim result(1 To 0)
-        End If
-    Else
-        ' Data is an array. Determine dimensions.
-        Dim numDimensions As Integer
-        Dim is1DArray As Boolean: is1DArray = False
-        Dim is2DVerticalArray As Boolean: is2DVerticalArray = False
-
-        Dim lBound1 As Long, uBound1 As Long
-        Dim lBound2 As Long, uBound2 As Long ' Only for 2D
-
-        On Error Resume Next ' To determine dimensions safely
-        lBound1 = LBound(data, 1)
-        uBound1 = UBound(data, 1)
-        If Err.Number <> 0 Then GoTo InvalidArrayStructure ' Failed to get even 1st dimension bounds
-
-        lBound2 = LBound(data, 2)
-        uBound2 = UBound(data, 2)
-        If Err.Number = 0 Then
-            numDimensions = 2
-            If lBound2 = 1 And uBound2 = 1 Then
-                is2DVerticalArray = True ' Standard N rows x 1 col array from vertical range
-            End If
-            ' If lBound2 > uBound2 (e.g. (1 to 0, 1 to 1)) this is also an empty representation
-            ' but is2DVerticalArray would be false.
-        Else
-            numDimensions = 1
-            is1DArray = True
-            Err.Clear ' Clear the error from failing to get 2nd dimension
-        End If
-        On Error GoTo ReadRangeErrorHandler ' Restore original error handler for subsequent operations
-
-        If is1DArray Then
-            numRowsOrElements = uBound1 - lBound1 + 1
-            If numRowsOrElements > 0 Then
-                ReDim result(lBound1 To uBound1) ' Preserve original 1D bounds
-                For r = lBound1 To uBound1
-                    If Not IsEmpty(data(r)) And Trim(CStr(data(r))) <> "" Then
-                        result(r) = Trim(CStr(data(r)))
-                        nonEmptyCount = nonEmptyCount + 1
-                    Else
-                        result(r) = vbNullString
-                    End If
-                Next r
-            Else
-                 ReDim result(1 To 0) ' e.g. LBound=1, UBound=0
-            End If
-        ElseIf is2DVerticalArray Then ' 2D array that is N rows x 1 column
-            numRowsOrElements = uBound1 - lBound1 + 1
-            If numRowsOrElements > 0 Then
-                ReDim result(1 To numRowsOrElements) ' Convert to 1D array
-                Dim resultIdx As Long: resultIdx = 1
-                For r = lBound1 To uBound1
-                    If Not IsEmpty(data(r, lBound2)) And Trim(CStr(data(r, lBound2))) <> "" Then ' Use lBound2 for column index
-                        result(resultIdx) = Trim(CStr(data(r, lBound2)))
-                        nonEmptyCount = nonEmptyCount + 1
-                    Else
-                        result(resultIdx) = vbNullString
-                    End If
-                    resultIdx = resultIdx + 1
-                Next r
-            Else
-                ReDim result(1 To 0) ' e.g. LBound1=1, UBound1=0 for rows
-            End If
-        Else ' Array is 2D but not a single column, or some other unexpected array structure
-InvalidArrayStructure:
-            Call M04_LogWriter.WriteErrorLog("WARNING", moduleN, funcN, itemName & " (" & rangeAddress & ") は予期しない配列構造または空の配列です。空として扱います。ErrNo:" & Err.Number)
-            Err.Clear
-            ReDim result(1 To 0)
-        End If
-
-        If nonEmptyCount = 0 And numRowsOrElements > 0 Then ' Array had elements, but all were empty strings
-            ReDim result(1 To 0)
-        ElseIf numRowsOrElements <= 0 And Not (LBound(result) = 1 And UBound(result) = 0) Then
-             ' This case handles if result wasn't already set to (1 To 0) for an empty source array.
-             ReDim result(1 To 0)
-        End If
-    End If
-
-    ReadRangeToArray = result
+    ReadRangeToArray = data
     Exit Function
 
 ReadRangeErrorHandler:
-    Call M04_LogWriter.WriteErrorLog("CRITICAL_ERROR", moduleN, funcN, itemName & " (" & rangeAddress & ") の処理中に予期せぬエラー。", Err.Number, Err.Description)
-    ReDim result(1 To 0) ' Ensure it returns an initialized empty array on any severe error
-    ReadRangeToArray = result
+    Call M04_LogWriter.WriteErrorLog("ERROR", moduleN, funcN, itemName & " (" & rangeAddress & ") の範囲読み取り自体に失敗。", Err.Number, Err.Description)
+    ReadRangeToArray = Empty ' Return Empty on error
 End Function
 
 Public Function General_IsArrayInitialized(arr As Variant) As Boolean
