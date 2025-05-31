@@ -543,8 +543,10 @@ Private Function ConvertRawVariantToStringArray(ByVal rawData As Variant, ByVal 
     Dim localFuncName As String
     localFuncName = "ConvertRawVariantToStringArray"
 
+    On Error GoTo 0 ' Clear any pre-existing error handler from caller
+    On Error GoTo ErrorHandler_CVTSA_Direct ' Set specific handler for this function
+
     ReDim tempList(1 To 0) ' Initialize to empty array
-    On Error GoTo ErrorHandler_CVTSA_Direct ' Main error handler for the function
 
     If currentConfig.DebugDetailLevel2Enabled Then
         tempMsg = "START for item: '" & itemName & "' (called by " & funcN_from_caller & "). TypeName(rawData): " & TypeName(rawData)
