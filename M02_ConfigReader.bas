@@ -543,8 +543,8 @@ Private Function ConvertRawVariantToStringArray(ByVal rawData As Variant, ByVal 
     Dim localFuncName As String
     localFuncName = "ConvertRawVariantToStringArray"
 
-    ReDim tempList(1 To 0) ' ★ Initialize tempList
-    On Error GoTo ErrorHandler_CVTSA_Direct
+    ReDim tempList(1 To 0) ' Initialize to empty array
+    On Error GoTo ErrorHandler_CVTSA_Direct ' Main error handler for the function
 
     If currentConfig.DebugDetailLevel2Enabled Then
         tempMsg = "START for item: '" & itemName & "' (called by " & funcN_from_caller & "). TypeName(rawData): " & TypeName(rawData)
@@ -570,27 +570,33 @@ Private Function ConvertRawVariantToStringArray(ByVal rawData As Variant, ByVal 
         Dim dbg_l1 As String, dbg_u1 As String, dbg_l2 As String, dbg_u2 As String
         Dim numDimensions As Integer
 
-        On Error Resume Next ' For LBound/UBound calls
+        On Error Resume Next ' Temporarily for LBound/UBound calls
         lBound1 = LBound(rawData, 1): dbg_l1 = CStr(lBound1)
         uBound1 = UBound(rawData, 1): dbg_u1 = CStr(uBound1)
         If Err.Number <> 0 Then
-            dbg_l1 = "Err:" & Err.Description: dbg_u1 = "Err:" & Err.Description
-            If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - Error getting 1st dim bounds (called by " & funcN_from_caller & "): " & Err.Description)
+            Debug.Print Now & " " & localFuncName & ": DEBUG - Failed LBound/UBound on 1st dimension for '" & itemName & "'. Error: " & Err.Description
+            dbg_l1 = "Err:" & Err.Number: dbg_u1 = "Err:" & Err.Description ' Capture error for logging if needed
             Err.Clear
-            GoTo InvalidArrayStructure_CVTSA_Direct
+            GoTo InvalidArrayStructure_CVTSA_Direct ' Treat as invalid structure
         End If
 
         lBound2 = LBound(rawData, 2): dbg_l2 = CStr(lBound2)
         uBound2 = UBound(rawData, 2): dbg_u2 = CStr(uBound2)
         If Err.Number = 0 Then
             numDimensions = 2
-            If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - Detected 2D Array (called by " & funcN_from_caller & "). Bounds1: " & dbg_l1 & " To " & dbg_u1 & ". Bounds2: " & dbg_l2 & " To " & dbg_u2)
         Else
             numDimensions = 1
             Err.Clear
-            If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - Detected 1D Array (called by " & funcN_from_caller & "). Bounds: " & dbg_l1 & " To " & dbg_u1)
         End If
-        On Error GoTo ErrorHandler_CVTSA_Direct
+        On Error GoTo ErrorHandler_CVTSA_Direct ' Restore main error handler immediately
+
+        If currentConfig.DebugDetailLevel2Enabled Then
+            If numDimensions = 1 Then
+                Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - Detected 1D Array. Bounds: " & dbg_l1 & " To " & dbg_u1)
+            Else ' numDimensions = 2
+                Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - Detected 2D Array. Bounds1: " & dbg_l1 & " To " & dbg_u1 & ". Bounds2: " & dbg_l2 & " To " & dbg_u2)
+            End If
+        End If
 
         If numDimensions = 1 Then
             If uBound1 >= lBound1 Then
@@ -644,21 +650,25 @@ Private Function ConvertRawVariantToStringArray(ByVal rawData As Variant, ByVal 
             End If
         Else
 InvalidArrayStructure_CVTSA_Direct:
-            tempMsg = itemName & " - 予期しない配列構造または空の配列 (呼び出し元: " & funcN_from_caller & "). L1:" & dbg_l1 & ", U1:" & dbg_u1 & ", L2:" & dbg_l2 & ", U2:" & dbg_u2 & ". 空として扱います。"
-            If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("WARNING_L2", moduleN, localFuncName, tempMsg)
-            Err.Clear
-            ReDim tempList(1 To 0)
+            If currentConfig.DebugDetailLevel2Enabled Then
+                tempMsg = itemName & " - 予期しない配列構造またはエラーのある配列 (呼び出し元: " & funcN_from_caller & "). L1:" & dbg_l1 & ", U1:" & dbg_u1 & ", L2:" & dbg_l2 & ", U2:" & dbg_u2 & ". 空として扱います。"
+                Call M04_LogWriter.WriteErrorLog("WARNING_L2", moduleN, localFuncName, tempMsg)
+            End If
+            ReDim tempList(1 To 0) ' Ensure defined as empty
         End If
     End If
 
-    ConvertRawVariantToStringArray = tempList ' ★ Assign tempList to function return value at the end
+    ConvertRawVariantToStringArray = tempList
     Exit Function
 
 ErrorHandler_CVTSA_Direct:
-    tempMsg = itemName & " の変換中に予期せぬエラー。 (呼び出し元: " & funcN_from_caller & ")"
+    tempMsg = itemName & " の変換中に予期せぬエラー (呼び出し元: " & funcN_from_caller & ")"
     Debug.Print Now & " CRITICAL_ERROR in " & localFuncName & ": " & tempMsg & " Err# " & Err.Number & " - " & Err.Description
-    ReDim tempList(1 To 0) ' Ensure tempList is a safe empty array
-    ConvertRawVariantToStringArray = tempList ' ★ Assign safe tempList to function return value
+    ' Ensure tempList is a safe empty array before assigning to return value
+    On Error Resume Next ' Prevent error handler from erroring itself on ReDim
+    ReDim tempList(1 To 0)
+    On Error GoTo 0 ' Turn off error resume next
+    ConvertRawVariantToStringArray = tempList
 End Function
 
 Private Sub DebugPrintArrayState(ByRef arr As Variant, ByVal arrName As String, ByRef currentConfig As tConfigSettings)
