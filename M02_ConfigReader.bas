@@ -46,215 +46,200 @@ End Function
 
 
 ' --- Public Functions ---
-Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal targetWorkbook As Workbook, ByVal configSheetName_Unused As String) As Boolean ' Renamed param as it's now read from configStruct
+Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal targetWorkbook As Workbook) As Boolean ' Third parameter removed
     Dim wsConfig As Worksheet
     Dim funcName As String: funcName = "LoadConfiguration"
-    ' Dim m_errorOccurred As Boolean: m_errorOccurred = False ' Now a module-level variable
-    m_errorOccurred = False ' Initialize at the start
+    ' m_errorOccurred is a module-level variable
 
+    m_errorOccurred = False ' Initialize at the start of this specific function call
 
-    ' Loop Counters
-    Dim fSectionReadLoopIdx As Long
-    Dim gSectionHeaderReadLoopIdx As Long
-    Dim dbgFSectionPrintIdx As Long
-    Dim dbgGHeaderPrintIdx As Long
-
-    ' Variables for F-Section Reading
-    Dim itemName As String
-    Dim offsetStr As String
-    Dim tempOffset As tOffset
-    Dim actualOffsetCount As Long
-    ' Dim currentFatalErrorState As Boolean ' This was used to check m_errorOccurred before and after ParseOffset, now ParseOffset directly modifies m_errorOccurred
-
-    ' Variables for G-Section Reading
-    Dim headerCellAddress As String ' Used for logging/debug, actual cell read is direct
-    Dim rawHeaderCellVal As Variant ' For reading raw header value
-    Dim headerVal As String         ' For processed header string
-    Dim outputOpt As String       ' For OutputDataOption
-
-    ' General temp variable for reading values
-    Dim tempVal As Variant
-
-
-    On Error GoTo ErrorHandler_LoadConfiguration
-
-    ' Configシートオブジェクト取得
-    On Error Resume Next
-    Set wsConfig = targetWorkbook.Worksheets(configSheetName)
-    On Error GoTo ErrorHandler_LoadConfiguration
+    ' Configシートオブジェクト取得 (configStruct.configSheetName を使用)
+    On Error Resume Next ' Specific handling for wsConfig acquisition
+    Set wsConfig = targetWorkbook.Worksheets(configStruct.configSheetName)
+    On Error GoTo 0 ' Reset error handling immediately after the Set statement
 
     If wsConfig Is Nothing Then
-        Call M04_LogWriter.WriteErrorLog("CRITICAL", MODULE_NAME, funcName, "Configシート「" & configSheetName & "」が見つかりません。", 0, "処理中断")
-        LoadConfiguration = False
-        Exit Function
+        ' This case should be rare if MainControl already set configStruct.configSheetName from a valid sheet.
+        ' However, if it happens, log it (M04_LogWriter might not be fully ready if error log sheet itself is the issue)
+        Debug.Print Now & " CRITICAL: " & MODULE_NAME & "." & funcName & " - Configシート「" & configStruct.configSheetName & "」が見つかりません。 (モジュール: M02_ConfigReader)"
+        m_errorOccurred = True
+        ' GoTo FinalConfigCheck_LoadConfig ' Use a specific label for cleanup within this function
+        ' For now, let it fall through to the main error check block
     End If
-    configStruct.ConfigSheetFullName = targetWorkbook.FullName & " | " & wsConfig.Name
 
-    ' --- A. 一般設定 ---
-    If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Reading Section A: General Settings"
-    Call LoadGeneralSettings(configStruct, wsConfig)
-    If Err.Number <> 0 Then m_errorOccurred = True: Call M04_LogWriter.WriteErrorLog("ERROR", MODULE_NAME, funcName, "LoadGeneralSettings からエラーが伝播。", Err.Number, Err.Description)
-    If m_errorOccurred Then GoTo FinalConfigCheck
+    If Not m_errorOccurred Then ' Proceed only if wsConfig was likely set
+        On Error GoTo ErrorHandler_LoadConfiguration ' General error handler for the Load... calls
 
-    ' --- B. 工程表ファイル内 設定 ---
-    Call LoadScheduleFileSettings(configStruct, wsConfig)
-    If Err.Number <> 0 Then m_errorOccurred = True: Call M04_LogWriter.WriteErrorLog("ERROR", MODULE_NAME, funcName, "LoadScheduleFileSettings からエラーが伝播。", Err.Number, Err.Description)
-    If m_errorOccurred Then GoTo FinalConfigCheck
+        configStruct.ConfigSheetFullName = targetWorkbook.FullName & " | " & wsConfig.Name ' Moved here, only if wsConfig is valid
 
-    ' --- C. 工程パターン定義 ---
-    ' Call LoadProcessPatternDefinition(configStruct, wsConfig) ' ★ TEMPORARILY COMMENT OUT
-    ' If Err.Number <> 0 Then m_errorOccurred = True: Call M04_LogWriter.WriteErrorLog("ERROR", MODULE_NAME, funcName, "LoadProcessPatternDefinition からエラーが伝播。", Err.Number, Err.Description)
-    ' If m_errorOccurred Then GoTo FinalConfigCheck
+        Call LoadGeneralSettings(configStruct, wsConfig)
+        ' After each call, check for errors that might have been raised by subs not setting m_errorOccurred
+        If Err.Number <> 0 Then Call PropagateError(MODULE_NAME, funcName, "LoadGeneralSettings", Err.Number, Err.Description)
+        If m_errorOccurred Then GoTo FinalConfigCheck_LoadConfig ' Check module flag
 
-    ' --- D. フィルタ条件 ---
-    Call LoadFilterConditions(configStruct, wsConfig) ' Focus on this one
-    If Err.Number <> 0 Then m_errorOccurred = True: Call M04_LogWriter.WriteErrorLog("ERROR", MODULE_NAME, funcName, "LoadFilterConditions からエラーが伝播。", Err.Number, Err.Description)
-    If m_errorOccurred Then GoTo FinalConfigCheck
+        Call LoadScheduleFileSettings(configStruct, wsConfig)
+        If Err.Number <> 0 Then Call PropagateError(MODULE_NAME, funcName, "LoadScheduleFileSettings", Err.Number, Err.Description)
+        If m_errorOccurred Then GoTo FinalConfigCheck_LoadConfig
 
-    ' --- E. 処理対象ファイル定義 ---
-    ' Call LoadTargetFileDefinition(configStruct, wsConfig) ' ★ TEMPORARILY COMMENT OUT
-    ' If Err.Number <> 0 Then m_errorOccurred = True: Call M04_LogWriter.WriteErrorLog("ERROR", MODULE_NAME, funcName, "LoadTargetFileDefinition からエラーが伝播。", Err.Number, Err.Description)
-    ' If m_errorOccurred Then GoTo FinalConfigCheck
+        ' Temporarily commented out calls (as per previous subtask)
+        ' Call LoadProcessPatternDefinition(configStruct, wsConfig)
+        ' If Err.Number <> 0 Then Call PropagateError(MODULE_NAME, funcName, "LoadProcessPatternDefinition", Err.Number, Err.Description)
+        ' If m_errorOccurred Then GoTo FinalConfigCheck_LoadConfig
 
+        Call LoadFilterConditions(configStruct, wsConfig) ' Focus on this one
+        If Err.Number <> 0 Then Call PropagateError(MODULE_NAME, funcName, "LoadFilterConditions", Err.Number, Err.Description)
+        If m_errorOccurred Then GoTo FinalConfigCheck_LoadConfig
 
-    ' --- F. 抽出データオフセット定義 ---
-    ' The F-Section (Offset Definitions) does not use ReadRangeToArray for arrays directly.
-    ' It uses ParseOffset in a loop. Its own error handling for m_errorOccurred is already present.
-    If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Reading Section F: Extraction Data Offset Definition (Array Method)"
-    actualOffsetCount = 0
+        ' Call LoadTargetFileDefinition(configStruct, wsConfig)
+        ' If Err.Number <> 0 Then Call PropagateError(MODULE_NAME, funcName, "LoadTargetFileDefinition", Err.Number, Err.Description)
+        ' If m_errorOccurred Then GoTo FinalConfigCheck_LoadConfig
 
-    Erase configStruct.OffsetItemMasterNames
-    Erase configStruct.OffsetDefinitions
-    Erase configStruct.IsOffsetOriginallyEmptyFlags
+        ' --- F. 抽出データオフセット定義 ---
+        Dim fSectionReadLoopIdx As Long ' Moved relevant Dim statements inside "If Not m_errorOccurred"
+        Dim gSectionHeaderReadLoopIdx As Long
+        Dim dbgFSectionPrintIdx As Long
+        Dim dbgGHeaderPrintIdx As Long
+        Dim itemName As String
+        Dim offsetStr As String
+        Dim tempOffset As tOffset
+        Dim actualOffsetCount As Long
+        Dim headerCellAddress As String
+        Dim rawHeaderCellVal As Variant
+        Dim headerVal As String
+        Dim outputOpt As String
 
-    For fSectionReadLoopIdx = 0 To 10 ' Corresponds to N778+fSectionReadLoopIdx
-        itemName = Trim(CStr(wsConfig.Range("N" & (778 + fSectionReadLoopIdx)).Value))
-        offsetStr = Trim(CStr(wsConfig.Range("O" & (778 + fSectionReadLoopIdx)).Value))
+        actualOffsetCount = 0 ' Initialize for F-Section processing
 
-        If Len(itemName) > 0 Then
-            actualOffsetCount = actualOffsetCount + 1
-            ReDim Preserve configStruct.OffsetItemMasterNames(1 To actualOffsetCount)
-            ReDim Preserve configStruct.OffsetDefinitions(1 To actualOffsetCount)
-            ReDim Preserve configStruct.IsOffsetOriginallyEmptyFlags(1 To actualOffsetCount)
+        If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Reading Section F: Extraction Data Offset Definition (Array Method)"
+        Erase configStruct.OffsetItemMasterNames
+        Erase configStruct.OffsetDefinitions
+        Erase configStruct.IsOffsetOriginallyEmptyFlags
 
-            configStruct.OffsetItemMasterNames(actualOffsetCount) = itemName
-            configStruct.IsOffsetOriginallyEmptyFlags(actualOffsetCount) = (Len(offsetStr) = 0)
+        For fSectionReadLoopIdx = 0 To 10 ' Corresponds to N778+fSectionReadLoopIdx
+            itemName = Trim(CStr(wsConfig.Range("N" & (778 + fSectionReadLoopIdx)).Value))
+            offsetStr = Trim(CStr(wsConfig.Range("O" & (778 + fSectionReadLoopIdx)).Value))
 
-            If Not configStruct.IsOffsetOriginallyEmptyFlags(actualOffsetCount) Then
-                If ParseOffset(offsetStr, tempOffset, m_errorOccurred, funcName & " (F-Section)", itemName & " オフセット(O" & (778 + fSectionReadLoopIdx) & ")", targetWorkbook, configStruct.ErrorLogSheetName) Then
-                    configStruct.OffsetDefinitions(actualOffsetCount) = tempOffset
+            If Len(itemName) > 0 Then
+                actualOffsetCount = actualOffsetCount + 1
+                ReDim Preserve configStruct.OffsetItemMasterNames(1 To actualOffsetCount)
+                ReDim Preserve configStruct.OffsetDefinitions(1 To actualOffsetCount)
+                ReDim Preserve configStruct.IsOffsetOriginallyEmptyFlags(1 To actualOffsetCount)
+
+                configStruct.OffsetItemMasterNames(actualOffsetCount) = itemName
+                configStruct.IsOffsetOriginallyEmptyFlags(actualOffsetCount) = (Len(offsetStr) = 0)
+
+                If Not configStruct.IsOffsetOriginallyEmptyFlags(actualOffsetCount) Then
+                    ' Note: ParseOffset itself sets the module-level m_errorOccurred on failure
+                    If ParseOffset(offsetStr, tempOffset, m_errorOccurred, funcName & " (F-Section)", itemName & " オフセット(O" & (778 + fSectionReadLoopIdx) & ")", targetWorkbook, configStruct.ErrorLogSheetName) Then
+                        configStruct.OffsetDefinitions(actualOffsetCount) = tempOffset
+                    Else
+                        configStruct.OffsetDefinitions(actualOffsetCount).Row = 0 ' Ensure default on parse fail
+                        configStruct.OffsetDefinitions(actualOffsetCount).Col = 0
+                    End If
                 Else
                     configStruct.OffsetDefinitions(actualOffsetCount).Row = 0
                     configStruct.OffsetDefinitions(actualOffsetCount).Col = 0
-                    ' m_errorOccurred is set by ParseOffset if parsing failed for non-empty string
                 End If
-            Else
-                configStruct.OffsetDefinitions(actualOffsetCount).Row = 0
-                configStruct.OffsetDefinitions(actualOffsetCount).Col = 0
-            End If
 
-            If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG_DETAIL:   F. Offset Item " & actualOffsetCount & " (" & itemName & ", N" & (778 + fSectionReadLoopIdx) & "): '" & offsetStr & "' -> R:" & configStruct.OffsetDefinitions(actualOffsetCount).Row & ", C:" & configStruct.OffsetDefinitions(actualOffsetCount).Col & ", IsEmptyOrig: " & configStruct.IsOffsetOriginallyEmptyFlags(actualOffsetCount)
-            If m_errorOccurred Then GoTo FinalConfigCheck ' Error during ParseOffset should lead to exit
+                If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG_DETAIL:   F. Offset Item " & actualOffsetCount & " (" & itemName & ", N" & (778 + fSectionReadLoopIdx) & "): '" & offsetStr & "' -> R:" & configStruct.OffsetDefinitions(actualOffsetCount).Row & ", C:" & configStruct.OffsetDefinitions(actualOffsetCount).Col & ", IsEmptyOrig: " & configStruct.IsOffsetOriginallyEmptyFlags(actualOffsetCount)
+                If m_errorOccurred Then GoTo FinalConfigCheck_LoadConfig ' Check module flag after ParseOffset
+            Else
+                If Len(offsetStr) > 0 And configStruct.TraceDebugEnabled Then
+                    Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M02_ConfigReader.LoadConfiguration - Offset string '" & offsetStr & "' found in O" & (778 + fSectionReadLoopIdx) & " but no item name in N" & (778 + fSectionReadLoopIdx) & ". Skipping this offset entry."
+                End If
+            End If
+        Next fSectionReadLoopIdx
+
+        If actualOffsetCount = 0 Then
+            If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M02_ConfigReader.LoadConfiguration - No offset items defined with names in N778:N788. Initializing offset arrays as empty."
+            ReDim configStruct.OffsetItemMasterNames(1 To 0)
+            ReDim configStruct.OffsetDefinitions(1 To 0)
+            ReDim configStruct.IsOffsetOriginallyEmptyFlags(1 To 0)
+        End If
+
+        ' Determine if F-Section was successful and set IsOffsetDefinitionsValid
+        If Not m_errorOccurred Then ' No parsing errors during F-Section
+            configStruct.IsOffsetDefinitionsValid = True ' Consider valid even if actualOffsetCount = 0 (arrays are ReDim'd)
         Else
-            If Len(offsetStr) > 0 And configStruct.TraceDebugEnabled Then
-                Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M02_ConfigReader.LoadConfiguration - Offset string '" & offsetStr & "' found in O" & (778 + fSectionReadLoopIdx) & " but no item name in N" & (778 + fSectionReadLoopIdx) & ". Skipping this offset entry."
-            End If
+            configStruct.IsOffsetDefinitionsValid = False ' Error occurred during F-Section processing
         End If
-    Next fSectionReadLoopIdx
+        If m_errorOccurred Then GoTo FinalConfigCheck_LoadConfig ' Re-check before G-section
 
-    If actualOffsetCount = 0 Then
-        If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M02_ConfigReader.LoadConfiguration - No offset items defined with names in N778:N788. Initializing offset arrays as empty."
-        ReDim configStruct.OffsetItemMasterNames(1 To 0)
-        ReDim configStruct.OffsetDefinitions(1 To 0)
-        ReDim configStruct.IsOffsetOriginallyEmptyFlags(1 To 0)
-    End If
+        ' --- G. 出力シート設定 ---
+        If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Reading Section G: Output Sheet Settings"
+        configStruct.OutputHeaderRowCount = IIf(IsEmpty(wsConfig.Range("O811").Value) Or IsNull(wsConfig.Range("O811").Value), 1, CLng(wsConfig.Range("O811").Value))
+        If configStruct.OutputHeaderRowCount <= 0 Then configStruct.OutputHeaderRowCount = 1
 
-    ' Determine if F-Section was successful and set IsOffsetDefinitionsValid
-    If Not m_errorOccurred Then ' No parsing errors during F-Section
-        If actualOffsetCount > 0 Then
-            configStruct.IsOffsetDefinitionsValid = True ' Items were read and no errors
-        Else ' actualOffsetCount = 0
-            ' No items defined, but arrays are ReDim'd (1 To 0), so consider it "valid" in terms of structure
-            configStruct.IsOffsetDefinitionsValid = True
+        If configStruct.OutputHeaderRowCount > 0 Then
+            ReDim configStruct.OutputHeaderContents(1 To configStruct.OutputHeaderRowCount)
+            For gSectionHeaderReadLoopIdx = 1 To configStruct.OutputHeaderRowCount
+                headerCellAddress = "O" & (811 + gSectionHeaderReadLoopIdx)
+                rawHeaderCellVal = wsConfig.Range(headerCellAddress).Value
+                If IsError(rawHeaderCellVal) Then
+                    headerVal = ""
+                    Call M04_LogWriter.WriteErrorLog("WARNING", MODULE_NAME, funcName, "ヘッダー内容セル (" & headerCellAddress & ") がエラー値「" & CStr(rawHeaderCellVal) & "」。空文字として扱います。", 0, configStruct.ConfigSheetFullName)
+                Else
+                    headerVal = Trim(CStr(rawHeaderCellVal))
+                End If
+                configStruct.OutputHeaderContents(gSectionHeaderReadLoopIdx) = headerVal
+            Next gSectionHeaderReadLoopIdx
         End If
-    Else
-        configStruct.IsOffsetDefinitionsValid = False ' Error occurred during F-Section processing
-    End If
 
-FinalConfigCheck: ' Label for potential GoTo from F-Section if error occurs
+        outputOpt = UCase(Trim(CStr(wsConfig.Range("O1124").Value)))
+        If outputOpt = "リセット" Or outputOpt = "追記" Then
+            configStruct.OutputDataOption = outputOpt
+        Else
+            configStruct.OutputDataOption = "リセット" ' Default
+        End If
+        configStruct.HideSheetMethod = Trim(CStr(wsConfig.Range("O1126").Value))
+        ' configStruct.HideSheetNames = ReadRangeToArray(wsConfig, "O1127:O1146", MODULE_NAME, funcName, "マクロ実行後非表示シートリスト") ' Still commented out
+
+    End If ' End of "If Not m_errorOccurred Then" for wsConfig check
+
+FinalConfigCheck_LoadConfig:
     If m_errorOccurred Then
-        configStruct.IsOffsetDefinitionsValid = False ' Ensure it's false if we jump here due to error
+        If Err.Number = 0 Then ' If m_errorOccurred was set by a sub but no active error here
+            Call M04_LogWriter.WriteErrorLog("CRITICAL", MODULE_NAME, funcName, "設定読み込み中にエラーが発生しました。詳細は直前のログを確認してください。")
+        Else ' An error is active, log it
+            Call M04_LogWriter.WriteErrorLog("CRITICAL", MODULE_NAME, funcName, "設定読み込み中にエラーが発生しました (伝播または新規)。", Err.Number, Err.Description)
+        End If
         LoadConfiguration = False
-        Exit Function
-    End If
-
-    ' --- G. 出力シート設定 ---
-    If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Reading Section G: Output Sheet Settings"
-    configStruct.OutputHeaderRowCount = IIf(IsEmpty(wsConfig.Range("O811").Value) Or IsNull(wsConfig.Range("O811").Value), 1, CLng(wsConfig.Range("O811").Value)) ' Default to 1 if empty
-    If configStruct.OutputHeaderRowCount <= 0 Then configStruct.OutputHeaderRowCount = 1 ' Ensure at least 1
-
-    If configStruct.OutputHeaderRowCount > 0 Then
-        ReDim configStruct.OutputHeaderContents(1 To configStruct.OutputHeaderRowCount)
-        For gSectionHeaderReadLoopIdx = 1 To configStruct.OutputHeaderRowCount
-            headerCellAddress = "O" & (811 + gSectionHeaderReadLoopIdx)
-            rawHeaderCellVal = wsConfig.Range(headerCellAddress).Value
-            If IsError(rawHeaderCellVal) Then
-                headerVal = ""
-                 Call M04_LogWriter.WriteErrorLog("WARNING", MODULE_NAME, funcName, "ヘッダー内容セル (" & headerCellAddress & ") がエラー値「" & CStr(rawHeaderCellVal) & "」。空文字として扱います。", 0, configStruct.ConfigSheetFullName)
-            Else
-                headerVal = Trim(CStr(rawHeaderCellVal))
-            End If
-            configStruct.OutputHeaderContents(gSectionHeaderReadLoopIdx) = headerVal
-        Next gSectionHeaderReadLoopIdx
-    End If
-
-    outputOpt = UCase(Trim(CStr(wsConfig.Range("O1124").Value)))
-    If outputOpt = "リセット" Or outputOpt = "追記" Then
-        configStruct.OutputDataOption = outputOpt
     Else
-        configStruct.OutputDataOption = "リセット" ' Default
-    End If
-    configStruct.HideSheetMethod = Trim(CStr(wsConfig.Range("O1126").Value))
-    ' configStruct.HideSheetNames = ReadRangeToArray(wsConfig, "O1127:O1146", MODULE_NAME, funcName, "マクロ実行後非表示シートリスト") ' ★ TEMPORARILY COMMENT OUT
-
-
-    ' --- Final Debug Print ---
-    If configStruct.DebugModeFlag Then
-        Debug.Print "--- Loaded Configuration Settings (M02_ConfigReader) ---"
-        ' ... (A, B, C, D, E sections) ...
-        Debug.Print "F. Extraction Data Offsets (Loaded " & IIf(UBound(configStruct.OffsetItemMasterNames) >= LBound(configStruct.OffsetItemMasterNames), UBound(configStruct.OffsetItemMasterNames), 0) & " items):"
-        If UBound(configStruct.OffsetItemMasterNames) >= LBound(configStruct.OffsetItemMasterNames) Then
-            For dbgFSectionPrintIdx = LBound(configStruct.OffsetItemMasterNames) To UBound(configStruct.OffsetItemMasterNames)
-                Debug.Print "  " & dbgFSectionPrintIdx & ". Name: '" & configStruct.OffsetItemMasterNames(dbgFSectionPrintIdx) & _
-                              "', Offset: R=" & configStruct.OffsetDefinitions(dbgFSectionPrintIdx).Row & ", C=" & configStruct.OffsetDefinitions(dbgFSectionPrintIdx).Col & _
-                              ", IsEmptyOrig: " & configStruct.IsOffsetOriginallyEmptyFlags(dbgFSectionPrintIdx)
-            Next dbgFSectionPrintIdx
+        If configStruct.DebugModeFlag Then
+            ' --- Final Debug Print --- (Moved inside success condition)
+            Dim dbgFSectionPrintIdx_Renamed As Long ' Declare here as it's only used in this block
+            Dim dbgGHeaderPrintIdx_Renamed As Long
+            Debug.Print "--- Loaded Configuration Settings (M02_ConfigReader) ---"
+            Debug.Print "F. IsOffsetDefinitionsValid: " & configStruct.IsOffsetDefinitionsValid
+            If configStruct.IsOffsetDefinitionsValid And UBound(configStruct.OffsetItemMasterNames) >= LBound(configStruct.OffsetItemMasterNames) Then
+                 For dbgFSectionPrintIdx_Renamed = LBound(configStruct.OffsetItemMasterNames) To UBound(configStruct.OffsetItemMasterNames)
+                    Debug.Print "  F Item " & dbgFSectionPrintIdx_Renamed & ". Name: '" & configStruct.OffsetItemMasterNames(dbgFSectionPrintIdx_Renamed) & _
+                                  "', Offset: R=" & configStruct.OffsetDefinitions(dbgFSectionPrintIdx_Renamed).Row & ", C=" & configStruct.OffsetDefinitions(dbgFSectionPrintIdx_Renamed).Col & _
+                                  ", IsEmptyOrig: " & configStruct.IsOffsetOriginallyEmptyFlags(dbgFSectionPrintIdx_Renamed)
+                Next dbgFSectionPrintIdx_Renamed
+            ElseIf configStruct.IsOffsetDefinitionsValid Then
+                Debug.Print "  F. No Offset Items Loaded."
+            Else
+                Debug.Print "  F. Offset Definitions are NOT valid."
+            End If
+            Debug.Print "G-1. OutputHeaderRowCount: " & configStruct.OutputHeaderRowCount
+            If configStruct.OutputHeaderRowCount > 0 And General_IsArrayInitialized(configStruct.OutputHeaderContents) Then
+                For dbgGHeaderPrintIdx_Renamed = 1 To configStruct.OutputHeaderRowCount
+                     Debug.Print "  G-2. OutputHeaderContents(" & dbgGHeaderPrintIdx_Renamed & "): [" & configStruct.OutputHeaderContents(dbgGHeaderPrintIdx_Renamed) & "]"
+                Next dbgGHeaderPrintIdx_Renamed
+            End If
+            Debug.Print "--- End of Loaded Configuration Settings ---"
         End If
-        Debug.Print "G-1. OutputHeaderRowCount: " & configStruct.OutputHeaderRowCount
-        If configStruct.OutputHeaderRowCount > 0 And General_IsArrayInitialized(configStruct.OutputHeaderContents) Then
-            For dbgGHeaderPrintIdx = 1 To configStruct.OutputHeaderRowCount
-                 Debug.Print "  G-2. OutputHeaderContents(" & dbgGHeaderPrintIdx & "): [" & configStruct.OutputHeaderContents(dbgGHeaderPrintIdx) & "]"
-            Next dbgGHeaderPrintIdx
-        End If
-        ' ... (other G section items) ...
-        Debug.Print "--- End of Loaded Configuration Settings ---"
+        LoadConfiguration = True
     End If
-
-    LoadConfiguration = True
     Exit Function
 
-ErrorHandler_LoadConfiguration:
-    Call M04_LogWriter.WriteErrorLog("CRITICAL", MODULE_NAME, funcName, "設定読み込み中に予期せぬエラーが発生しました。", Err.Number, Err.Description)
-    LoadConfiguration = False
+ErrorHandler_LoadConfiguration: ' Catches unhandled errors from Load... calls
+    Call PropagateError(MODULE_NAME, funcName, "LoadConfigurationメイン処理", Err.Number, Err.Description)
+    Resume FinalConfigCheck_LoadConfig
 End Function
 
-
 ' --- Private Helper Subroutines ---
-' LoadGeneralSettings, LoadScheduleFileSettings, LoadProcessPatternDefinition, LoadFilterConditions, LoadTargetFileDefinition remain
-' GetSpecificOffsetFromString is now replaced by ParseOffset (defined at module level or passed in if needed by helpers)
-' ReadRangeToArray, ReadStringCell, ReadLongCell, ReadBoolCell, General_IsArrayInitialized remain
-
-' A. 一般設定 (O列)
 Private Sub LoadGeneralSettings(ByRef config As tConfigSettings, ByVal ws As Worksheet)
     Dim funcName As String: funcName = "LoadGeneralSettings"
     On Error Resume Next ' 特定のセルアクセスエラーをハンドルするため
@@ -565,3 +550,11 @@ Public Function General_IsArrayInitialized(arr As Variant) As Boolean
     ' もし「要素が実際に存在するか」を確認したい場合は、別途 UBound(arr) >= LBound(arr) のようなチェックを行う。
     ' ここでは「配列として使える状態か」を返すことに注力する。
 End Function
+
+Private Sub PropagateError(ByVal moduleN As String, ByVal callerProcName As String, ByVal failedSubName As String, ByVal errNum As Long, ByVal errDesc As String)
+    ' This sub is called when a Load... sub finishes and Err.Number is not 0,
+    ' meaning an error occurred in the sub and was not handled by Resume Next or Exit Sub within it.
+    m_errorOccurred = True ' Set the module-level flag
+    Call M04_LogWriter.WriteErrorLog("ERROR", moduleN, callerProcName, failedSubName & " からエラーが伝播 (または新規発生)。", errNum, errDesc)
+    ' Do not Clear Err here, let LoadConfiguration handle it or GoTo
+End Sub

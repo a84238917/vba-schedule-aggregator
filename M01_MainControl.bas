@@ -54,7 +54,7 @@ Public Sub ExtractDataMain()
 
     ' --- Phase 2: Load Full Configuration ---
     ' Now that error logging is set up, proceed with full configuration loading
-    If Not M02_ConfigReader.LoadConfiguration(g_configSettings, ThisWorkbook, g_configSettings.configSheetName) Then
+    If Not M02_ConfigReader.LoadConfiguration(g_configSettings, ThisWorkbook) Then ' ★ New call (third argument removed)
         Call M04_LogWriter.WriteErrorLog("CRITICAL", "MainControl", "ExtractDataMain", "設定の読み込みに失敗しました。処理を中断します。")
         MsgBox "設定の読み込みに失敗しました。処理を中断します。", vbCritical, "設定エラー"
         GoTo FinalizeRoutine_ExtractDataMain
