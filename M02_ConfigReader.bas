@@ -618,10 +618,14 @@ Private Function ConvertRawVariantToStringArray(ByVal rawData As Variant, ByVal 
         Debug.Print Now & " CVTSA_Point_017: After First DEBUG_L2 Log Call for " & itemName
     End If
 
+    Debug.Print Now & " CVTSA_Point_018: Checking IsEmpty(rawData). TypeName(rawData)=" & TypeName(rawData)
     If IsEmpty(rawData) Then
+        Debug.Print Now & " CVTSA_Point_019: rawData is Empty."
         If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - rawData is Empty (called by " & funcN_from_caller & "). Returning empty array (1 To 0).")
         ' cvtsaTempArray is already (1 To 0)
+    Debug.Print Now & " CVTSA_Point_020: Checking Not IsArray(rawData)."
     ElseIf Not IsArray(rawData) Then
+        Debug.Print Now & " CVTSA_Point_021: rawData is Scalar."
         If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - rawData is Scalar (called by " & funcN_from_caller & "). Value: '" & CStr(rawData) & "'")
         If Trim(CStr(rawData)) <> "" Then
             ReDim cvtsaTempArray(1 To 1)
@@ -631,7 +635,9 @@ Private Function ConvertRawVariantToStringArray(ByVal rawData As Variant, ByVal 
             ' cvtsaTempArray is already (1 To 0)
             If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - Scalar is empty. Returning (1 To 0) array.")
         End If
+    Debug.Print Now & " CVTSA_Point_022: Processing rawData as Array."
     Else ' IsArray(rawData) is True
+        Debug.Print Now & " CVTSA_Point_023: Entered Array processing block."
         If currentConfig.DebugDetailLevel2Enabled Then Call M04_LogWriter.WriteErrorLog("DEBUG_L2", moduleN, localFuncName, itemName & " - rawData is Array (called by " & funcN_from_caller & ").")
 
         Dim dbg_l1 As String, dbg_u1 As String, dbg_l2 As String, dbg_u2 As String
