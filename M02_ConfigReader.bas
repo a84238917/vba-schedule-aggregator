@@ -535,6 +535,8 @@ ReadRangeErrorHandler:
 End Function
 
 Private Function ConvertRawVariantToStringArray(ByVal rawData As Variant, ByVal moduleN As String, ByVal funcN_from_caller As String, ByVal itemName As String, ByRef currentConfig As tConfigSettings) As String()
+    Debug.Print Now & " CVTSA_CALLED for: '" & itemName & "' from '" & funcN_from_caller & "'" ' ★★★ This is the added line ★★★
+
     Dim tempList() As String ' ★ Re-introduced
     Dim i As Long, r As Long
     Dim count As Long
