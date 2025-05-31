@@ -39,12 +39,11 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
     Dim wsConfig As Worksheet
     Dim funcName As String: funcName = "LoadConfiguration"
 
-    m_errorOccurred = False ' Initialize module-level flag at the start of this specific function call
+    m_errorOccurred = False ' Initialize module-level flag
 
-    ' Configシートオブジェクト取得
-    On Error Resume Next ' Specific handling for wsConfig acquisition
+    On Error Resume Next
     Set wsConfig = targetWorkbook.Worksheets(configStruct.configSheetName)
-    On Error GoTo 0 ' Reset error handling immediately
+    On Error GoTo 0
 
     If wsConfig Is Nothing Then
         Debug.Print Now & " CRITICAL: " & MODULE_NAME & "." & funcName & " - Configシート「" & configStruct.configSheetName & "」が見つかりません。"
@@ -52,28 +51,28 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
     End If
 
     If Not m_errorOccurred Then
-        On Error GoTo ErrorHandler_LoadConfiguration ' General error handler for the Load... calls
+        On Error GoTo ErrorHandler_LoadConfiguration
         configStruct.ConfigSheetFullName = targetWorkbook.FullName & " | " & wsConfig.Name
 
         Call LoadGeneralSettings(configStruct, wsConfig)
-        If Err.Number <> 0 Then Call PropagateError(MODULE_NAME, funcName, "LoadGeneralSettings", Err.Number, Err.Description)
+        If Err.Number <> 0 Then Call LogErrorAndSetOccurredFlag(MODULE_NAME, funcName, "LoadGeneralSettings", Err.Number, Err.Description)
         If m_errorOccurred Then GoTo FinalConfigCheck_LoadConfig
 
         Call LoadScheduleFileSettings(configStruct, wsConfig)
-        If Err.Number <> 0 Then Call PropagateError(MODULE_NAME, funcName, "LoadScheduleFileSettings", Err.Number, Err.Description)
+        If Err.Number <> 0 Then Call LogErrorAndSetOccurredFlag(MODULE_NAME, funcName, "LoadScheduleFileSettings", Err.Number, Err.Description)
         If m_errorOccurred Then GoTo FinalConfigCheck_LoadConfig
 
-        ' Call LoadProcessPatternDefinition(configStruct, wsConfig) ' ★ TEMPORARILY COMMENTED OUT
-        ' If Err.Number <> 0 Then Call PropagateError(MODULE_NAME, funcName, "LoadProcessPatternDefinition", Err.Number, Err.Description)
-        ' If m_errorOccurred Then GoTo FinalConfigCheck_LoadConfig
-
-        Call LoadFilterConditions(configStruct, wsConfig) ' Focus on this one
-        If Err.Number <> 0 Then Call PropagateError(MODULE_NAME, funcName, "LoadFilterConditions", Err.Number, Err.Description)
+        Call LoadProcessPatternDefinition(configStruct, wsConfig) ' UNCOMMENTED
+        If Err.Number <> 0 Then Call LogErrorAndSetOccurredFlag(MODULE_NAME, funcName, "LoadProcessPatternDefinition", Err.Number, Err.Description)
         If m_errorOccurred Then GoTo FinalConfigCheck_LoadConfig
 
-        ' Call LoadTargetFileDefinition(configStruct, wsConfig) ' ★ TEMPORARILY COMMENT OUT
-        ' If Err.Number <> 0 Then Call PropagateError(MODULE_NAME, funcName, "LoadTargetFileDefinition", Err.Number, Err.Description)
-        ' If m_errorOccurred Then GoTo FinalConfigCheck_LoadConfig
+        Call LoadFilterConditions(configStruct, wsConfig)
+        If Err.Number <> 0 Then Call LogErrorAndSetOccurredFlag(MODULE_NAME, funcName, "LoadFilterConditions", Err.Number, Err.Description)
+        If m_errorOccurred Then GoTo FinalConfigCheck_LoadConfig
+
+        Call LoadTargetFileDefinition(configStruct, wsConfig) ' UNCOMMENTED
+        If Err.Number <> 0 Then Call LogErrorAndSetOccurredFlag(MODULE_NAME, funcName, "LoadTargetFileDefinition", Err.Number, Err.Description)
+        If m_errorOccurred Then GoTo FinalConfigCheck_LoadConfig
 
         ' --- F. 抽出データオフセット定義 ---
         Dim fSectionReadLoopIdx As Long
@@ -83,7 +82,7 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
         Dim actualOffsetCount As Long
         actualOffsetCount = 0
 
-        If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Reading Section F"
+        If configStruct.DebugDetailLevel2Enabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL_L2: M02_ConfigReader.LoadConfiguration - Reading Section F"
         Erase configStruct.OffsetItemMasterNames
         Erase configStruct.OffsetDefinitions
         Erase configStruct.IsOffsetOriginallyEmptyFlags
@@ -108,9 +107,10 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
                     configStruct.OffsetDefinitions(actualOffsetCount).Row = 0
                     configStruct.OffsetDefinitions(actualOffsetCount).Col = 0
                 End If
+                If configStruct.DebugDetailLevel2Enabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_CONFIG_DETAIL_L2:   F. Offset Item " & actualOffsetCount & " (" & itemName & ", N" & (778 + fSectionReadLoopIdx) & "): '" & offsetStr & "' -> R:" & configStruct.OffsetDefinitions(actualOffsetCount).Row & ", C:" & configStruct.OffsetDefinitions(actualOffsetCount).Col & ", IsEmptyOrig: " & configStruct.IsOffsetOriginallyEmptyFlags(actualOffsetCount)
                 If m_errorOccurred Then GoTo FinalConfigCheck_LoadConfig
             Else
-                If Len(offsetStr) > 0 And configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: Offset string in O but no item name in N" & (778 + fSectionReadLoopIdx)
+                If Len(offsetStr) > 0 And configStruct.DebugDetailLevel2Enabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE_L2: Offset string in O but no item name in N" & (778 + fSectionReadLoopIdx)
             End If
         Next fSectionReadLoopIdx
         If actualOffsetCount = 0 Then
@@ -127,9 +127,9 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
         Dim rawHeaderCellVal As Variant
         Dim headerVal As String
         Dim outputOpt As String
-        Dim rawHideSheetNames As Variant ' For G-section
+        Dim rawHideSheetNames As Variant
 
-        If configStruct.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL: M02_ConfigReader.LoadConfiguration - Reading Section G"
+        If configStruct.DebugDetailLevel2Enabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_DETAIL_L2: M02_ConfigReader.LoadConfiguration - Reading Section G"
         configStruct.OutputHeaderRowCount = IIf(IsEmpty(wsConfig.Range("O811").Value) Or IsNull(wsConfig.Range("O811").Value), 1, CLng(wsConfig.Range("O811").Value))
         If configStruct.OutputHeaderRowCount <= 0 Then configStruct.OutputHeaderRowCount = 1
         If configStruct.OutputHeaderRowCount > 0 Then
@@ -150,21 +150,21 @@ Public Function LoadConfiguration(ByRef configStruct As tConfigSettings, ByVal t
         If outputOpt = "リセット" Or outputOpt = "追記" Then configStruct.OutputDataOption = outputOpt Else configStruct.OutputDataOption = "リセット"
         configStruct.HideSheetMethod = Trim(CStr(wsConfig.Range("O1126").Value))
 
-        ' Apply new pattern for HideSheetNames
-        headerCellAddress = "HideSheetNames (O1127:O1146)" ' Using headerCellAddress as currentItem context
-        rawHideSheetNames = ReadRangeToArray(wsConfig, "O1127:O1146", MODULE_NAME, funcName, headerCellAddress)
-        configStruct.HideSheetNames = ConvertRawVariantToStringArray(rawHideSheetNames, MODULE_NAME, funcName, headerCellAddress)
-        Call DebugPrintArrayState(configStruct.HideSheetNames, headerCellAddress)
+        Dim currentItemContext As String ' Renamed for clarity in G-section
+        currentItemContext = "HideSheetNames (O1127:O1146)"
+        rawHideSheetNames = ReadRangeToArray(wsConfig, "O1127:O1146", MODULE_NAME, funcName, currentItemContext)
+        configStruct.HideSheetNames = ConvertRawVariantToStringArray(rawHideSheetNames, MODULE_NAME, funcName, currentItemContext)
+        Call DebugPrintArrayState(configStruct.HideSheetNames, currentItemContext, configStruct)
 
-    End If ' End of "If Not m_errorOccurred Then" for wsConfig check
+    End If
 
 FinalConfigCheck_LoadConfig:
     If m_errorOccurred Then
         If Err.Number = 0 Then Call M04_LogWriter.WriteErrorLog("CRITICAL", MODULE_NAME, funcName, "設定読み込み中にエラーが発生しました。詳細は直前のログを確認してください。") Else Call M04_LogWriter.WriteErrorLog("CRITICAL", MODULE_NAME, funcName, "設定読み込み中にエラーが発生しました (伝播または新規)。", Err.Number, Err.Description)
         LoadConfiguration = False
     Else
-        If configStruct.DebugModeFlag Then
-            Dim dbgFSectionPrintIdx As Long, dbgGHeaderPrintIdx As Long ' Declare loop counters for debug print
+        If configStruct.DebugDetailLevel3Enabled Then ' Changed from DebugModeFlag to DebugDetailLevel3Enabled
+            Dim dbgFSectionPrintIdx As Long, dbgGHeaderPrintIdx As Long
             Debug.Print "--- Loaded Configuration Settings (M02_ConfigReader) ---"
             Debug.Print "F. IsOffsetDefinitionsValid: " & configStruct.IsOffsetDefinitionsValid
             If configStruct.IsOffsetDefinitionsValid And General_IsArrayInitialized(configStruct.OffsetItemMasterNames) And UBound(configStruct.OffsetItemMasterNames) >= LBound(configStruct.OffsetItemMasterNames) Then
@@ -187,11 +187,11 @@ FinalConfigCheck_LoadConfig:
     End If
     Exit Function
 ErrorHandler_LoadConfiguration:
-    Call PropagateError(MODULE_NAME, funcName, "LoadConfigurationメイン処理", Err.Number, Err.Description)
+    Call LogErrorAndSetOccurredFlag(MODULE_NAME, funcName, "LoadConfigurationメイン処理", Err.Number, Err.Description)
     Resume FinalConfigCheck_LoadConfig
 End Function
 
-Private Sub PropagateError(ByVal moduleN As String, ByVal callerProcName As String, ByVal failedSubName As String, ByVal errNum As Long, ByVal errDesc As String)
+Private Sub LogErrorAndSetOccurredFlag(ByVal moduleN As String, ByVal callerProcName As String, ByVal failedSubName As String, ByVal errNum As Long, ByVal errDesc As String)
     m_errorOccurred = True
     Call M04_LogWriter.WriteErrorLog("ERROR", moduleN, callerProcName, failedSubName & " からエラーが伝播 (または新規発生)。", errNum, errDesc)
 End Sub
@@ -204,14 +204,19 @@ Private Sub LoadGeneralSettings(ByRef config As tConfigSettings, ByVal ws As Wor
 
     currentItem = "DebugModeFlag (O3)"
     config.DebugModeFlag = ReadBoolCell(ws, "O3", MODULE_NAME, funcName, currentItem)
-    currentItem = "TraceDebugEnabled (O4)"
-    config.TraceDebugEnabled = ReadBoolCell(ws, "O4", MODULE_NAME, funcName, currentItem, True)
+    currentItem = "DebugDetailLevel1Enabled (O4)"
+    config.DebugDetailLevel1Enabled = ReadBoolCell(ws, "O4", MODULE_NAME, funcName, currentItem, True)
     currentItem = "EnableSheetLogging (O5)"
     config.EnableSheetLogging = ReadBoolCell(ws, "O5", MODULE_NAME, funcName, currentItem, True)
     currentItem = "EnableSearchConditionLogSheetOutput (O6)"
     config.EnableSearchConditionLogSheetOutput = ReadBoolCell(ws, "O6", MODULE_NAME, funcName, currentItem, True)
     currentItem = "EnableErrorLogSheetOutput (O7)"
     config.EnableErrorLogSheetOutput = ReadBoolCell(ws, "O7", MODULE_NAME, funcName, currentItem, True)
+    currentItem = "DebugDetailLevel2Enabled (O8)"
+    config.DebugDetailLevel2Enabled = ReadBoolCell(ws, "O8", MODULE_NAME, funcName, currentItem, False)
+    currentItem = "DebugDetailLevel3Enabled (O9)"
+    config.DebugDetailLevel3Enabled = ReadBoolCell(ws, "O9", MODULE_NAME, funcName, currentItem, False)
+
     currentItem = "DefaultFolderPath (O12)"
     config.DefaultFolderPath = ReadStringCell(ws, "O12", MODULE_NAME, funcName, currentItem)
     currentItem = "LogSheetName (O42)"
@@ -228,8 +233,7 @@ Private Sub LoadGeneralSettings(ByRef config As tConfigSettings, ByVal ws As Wor
     config.GetPatternDataMethod = ReadBoolCell(ws, "O122", MODULE_NAME, funcName, currentItem)
     Exit Sub
 ErrorHandler_LoadGeneralSettings:
-    Call M04_LogWriter.WriteErrorLog("ERROR", MODULE_NAME, funcName, "一般設定「" & currentItem & "」読込エラー", Err.Number, Err.Description)
-    ' Propagate error to LoadConfiguration
+    Call LogErrorAndSetOccurredFlag(MODULE_NAME, funcName, "一般設定「" & currentItem & "」読込エラー", Err.Number, Err.Description)
 End Sub
 
 Private Sub LoadScheduleFileSettings(ByRef config As tConfigSettings, ByVal ws As Worksheet)
@@ -241,7 +245,7 @@ Private Sub LoadScheduleFileSettings(ByRef config As tConfigSettings, ByVal ws A
     currentItem = "TargetSheetNames (O66:O75)"
     rawData = ReadRangeToArray(ws, "O66:O75", MODULE_NAME, funcName, currentItem)
     config.TargetSheetNames = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
-    Call DebugPrintArrayState(config.TargetSheetNames, currentItem)
+    Call DebugPrintArrayState(config.TargetSheetNames, currentItem, config)
 
     currentItem = "HeaderRowCount (O87)"
     config.HeaderRowCount = ReadLongCell(ws, "O87", MODULE_NAME, funcName, currentItem)
@@ -263,7 +267,7 @@ Private Sub LoadScheduleFileSettings(ByRef config As tConfigSettings, ByVal ws A
     config.ProcessesPerDay = ReadLongCell(ws, "O114", MODULE_NAME, funcName, currentItem)
     Exit Sub
 ErrorHandler_LoadScheduleFileSettings:
-    Call M04_LogWriter.WriteErrorLog("ERROR", MODULE_NAME, funcName, "工程表ファイル設定「" & currentItem & "」読込エラー", Err.Number, Err.Description)
+    Call LogErrorAndSetOccurredFlag(MODULE_NAME, funcName, "工程表ファイル設定「" & currentItem & "」読込エラー", Err.Number, Err.Description)
 End Sub
 
 Private Sub LoadProcessPatternDefinition(ByRef config As tConfigSettings, ByVal ws As Worksheet)
@@ -277,46 +281,44 @@ Private Sub LoadProcessPatternDefinition(ByRef config As tConfigSettings, ByVal 
     currentItem = "CurrentPatternIdentifier (O126)"
     config.CurrentPatternIdentifier = ReadStringCell(ws, "O126", MODULE_NAME, funcName, currentItem)
 
-    numProcesses = config.ProcessesPerDay ' Assuming ProcessesPerDay is already loaded
-    If numProcesses <= 0 Then numProcesses = 10 ' Default if not set or invalid
+    numProcesses = config.ProcessesPerDay
+    If numProcesses <= 0 Then numProcesses = 10
 
     currentItem = "ProcessKeys (I129:I" & (128 + numProcesses) & ")"
     rawData = ReadRangeToArray(ws, "I129:I" & (128 + numProcesses), MODULE_NAME, funcName, currentItem)
     config.ProcessKeys = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
-    Call DebugPrintArrayState(config.ProcessKeys, currentItem)
+    Call DebugPrintArrayState(config.ProcessKeys, currentItem, config)
 
     currentItem = "Kankatsu1List (J129:J" & (128 + numProcesses) & ")"
     rawData = ReadRangeToArray(ws, "J129:J" & (128 + numProcesses), MODULE_NAME, funcName, currentItem)
     config.Kankatsu1List = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
-    Call DebugPrintArrayState(config.Kankatsu1List, currentItem)
+    Call DebugPrintArrayState(config.Kankatsu1List, currentItem, config)
 
     currentItem = "Kankatsu2List (K129:K" & (128 + numProcesses) & ")"
     rawData = ReadRangeToArray(ws, "K129:K" & (128 + numProcesses), MODULE_NAME, funcName, currentItem)
     config.Kankatsu2List = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
-    Call DebugPrintArrayState(config.Kankatsu2List, currentItem)
+    Call DebugPrintArrayState(config.Kankatsu2List, currentItem, config)
 
     currentItem = "Bunrui1List (L129:L" & (128 + numProcesses) & ")"
     rawData = ReadRangeToArray(ws, "L129:L" & (128 + numProcesses), MODULE_NAME, funcName, currentItem)
     config.Bunrui1List = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
-    Call DebugPrintArrayState(config.Bunrui1List, currentItem)
+    Call DebugPrintArrayState(config.Bunrui1List, currentItem, config)
 
     currentItem = "Bunrui2List (M129:M" & (128 + numProcesses) & ")"
     rawData = ReadRangeToArray(ws, "M129:M" & (128 + numProcesses), MODULE_NAME, funcName, currentItem)
     config.Bunrui2List = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
-    Call DebugPrintArrayState(config.Bunrui2List, currentItem)
+    Call DebugPrintArrayState(config.Bunrui2List, currentItem, config)
 
     currentItem = "Bunrui3List (N129:N" & (128 + numProcesses) & ")"
     rawData = ReadRangeToArray(ws, "N129:N" & (128 + numProcesses), MODULE_NAME, funcName, currentItem)
     config.Bunrui3List = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
-    Call DebugPrintArrayState(config.Bunrui3List, currentItem)
+    Call DebugPrintArrayState(config.Bunrui3List, currentItem, config)
 
     currentItem = "ProcessColCountSheetHeaders (O128:X128)"
     Dim headerData As Variant
-    headerData = ws.Range("O128:X128").Value ' This reads a 1-row, multi-column range
-    ' This needs specific handling for horizontal 2D array if to use ConvertRawVariantToStringArray
-    ' For now, keeping original logic for this specific item:
+    headerData = ws.Range("O128:X128").Value
     If IsArray(headerData) Then
-        On Error Resume Next ' Check bounds safely
+        On Error Resume Next
         Dim ub As Long: ub = UBound(headerData, 2)
         If Err.Number = 0 Then
             ReDim config.ProcessColCountSheetHeaders(1 To ub)
@@ -328,18 +330,17 @@ Private Sub LoadProcessPatternDefinition(ByRef config As tConfigSettings, ByVal 
             Call M04_LogWriter.WriteErrorLog("WARNING", MODULE_NAME, funcName, currentItem & " - UBound(headerData, 2) failed. Headers not loaded.")
         End If
         On Error GoTo ErrorHandler_LoadProcessPatternDefinition
-    ElseIf Not IsEmpty(headerData) Then ' Single cell
+    ElseIf Not IsEmpty(headerData) Then
         ReDim config.ProcessColCountSheetHeaders(1 To 1)
         config.ProcessColCountSheetHeaders(1) = Trim(CStr(headerData))
     Else
         ReDim config.ProcessColCountSheetHeaders(1 To 0)
     End If
-    Call DebugPrintArrayState(config.ProcessColCountSheetHeaders, currentItem)
+    Call DebugPrintArrayState(config.ProcessColCountSheetHeaders, currentItem, config)
 
     currentItem = "ProcessColCounts (O129:X" & (128 + numProcesses) & ")"
-    config.ProcessColCounts = ws.Range("O129:X" & (128 + numProcesses)).Value ' Reads as 2D Variant, leave as is
+    config.ProcessColCounts = ws.Range("O129:X" & (128 + numProcesses)).Value
 
-    ' Logic for ProcessDetails based on Kankatsu lists (original logic seems okay if Kankatsu lists are correctly 1D String arrays)
     If General_IsArrayInitialized(config.Kankatsu1List) And General_IsArrayInitialized(config.Kankatsu2List) Then
         Dim k1Count As Long, k2Count As Long, maxCount As Long
         k1Count = 0: If UBound(config.Kankatsu1List) >= LBound(config.Kankatsu1List) Then k1Count = UBound(config.Kankatsu1List)
@@ -359,14 +360,13 @@ Private Sub LoadProcessPatternDefinition(ByRef config As tConfigSettings, ByVal 
     End If
     Exit Sub
 ErrorHandler_LoadProcessPatternDefinition:
-    Call M04_LogWriter.WriteErrorLog("ERROR", MODULE_NAME, funcName, "工程パターン定義「" & currentItem & "」読込エラー", Err.Number, Err.Description)
+    Call LogErrorAndSetOccurredFlag(MODULE_NAME, funcName, "工程パターン定義「" & currentItem & "」読込エラー", Err.Number, Err.Description)
 End Sub
 
 Private Sub LoadFilterConditions(ByRef config As tConfigSettings, ByVal ws As Worksheet)
     Dim funcName As String: funcName = "LoadFilterConditions"
     Dim currentItem As String
     Dim rawData As Variant
-
     On Error GoTo ErrorHandler_LoadFilterConditions
 
     currentItem = "WorkerFilterLogic (O242)"
@@ -375,17 +375,17 @@ Private Sub LoadFilterConditions(ByRef config As tConfigSettings, ByVal ws As Wo
     currentItem = "WorkerFilterList (O243:O262)"
     rawData = ReadRangeToArray(ws, "O243:O262", MODULE_NAME, funcName, currentItem)
     config.WorkerFilterList = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
-    Call DebugPrintArrayState(config.WorkerFilterList, currentItem)
+    Call DebugPrintArrayState(config.WorkerFilterList, currentItem, config)
 
     currentItem = "Kankatsu1FilterList (O275:O294)"
     rawData = ReadRangeToArray(ws, "O275:O294", MODULE_NAME, funcName, currentItem)
     config.Kankatsu1FilterList = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
-    Call DebugPrintArrayState(config.Kankatsu1FilterList, currentItem)
+    Call DebugPrintArrayState(config.Kankatsu1FilterList, currentItem, config)
 
     currentItem = "Kankatsu2FilterList (O305:O334)"
     rawData = ReadRangeToArray(ws, "O305:O334", MODULE_NAME, funcName, currentItem)
     config.Kankatsu2FilterList = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
-    Call DebugPrintArrayState(config.Kankatsu2FilterList, currentItem)
+    Call DebugPrintArrayState(config.Kankatsu2FilterList, currentItem, config)
 
     currentItem = "Bunrui1Filter (O346)"
     config.Bunrui1Filter = ReadStringCell(ws, "O346", MODULE_NAME, funcName, "分類1フィルター")
@@ -397,22 +397,22 @@ Private Sub LoadFilterConditions(ByRef config As tConfigSettings, ByVal ws As Wo
     currentItem = "KoujiShuruiFilterList (O409:O418)"
     rawData = ReadRangeToArray(ws, "O409:O418", MODULE_NAME, funcName, currentItem)
     config.KoujiShuruiFilterList = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
-    Call DebugPrintArrayState(config.KoujiShuruiFilterList, currentItem)
+    Call DebugPrintArrayState(config.KoujiShuruiFilterList, currentItem, config)
 
     currentItem = "KoubanFilterList (O431:O440)"
     rawData = ReadRangeToArray(ws, "O431:O440", MODULE_NAME, funcName, currentItem)
     config.KoubanFilterList = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
-    Call DebugPrintArrayState(config.KoubanFilterList, currentItem)
+    Call DebugPrintArrayState(config.KoubanFilterList, currentItem, config)
 
     currentItem = "SagyoushuruiFilterList (O451:O470)"
     rawData = ReadRangeToArray(ws, "O451:O470", MODULE_NAME, funcName, currentItem)
     config.SagyoushuruiFilterList = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
-    Call DebugPrintArrayState(config.SagyoushuruiFilterList, currentItem)
+    Call DebugPrintArrayState(config.SagyoushuruiFilterList, currentItem, config)
 
     currentItem = "TantouFilterList (O481:O490)"
     rawData = ReadRangeToArray(ws, "O481:O490", MODULE_NAME, funcName, currentItem)
     config.TantouFilterList = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
-    Call DebugPrintArrayState(config.TantouFilterList, currentItem)
+    Call DebugPrintArrayState(config.TantouFilterList, currentItem, config)
 
     currentItem = "NinzuFilter (O503)"
     config.NinzuFilter = ReadStringCell(ws, "O503", MODULE_NAME, funcName, "人数フィルター")
@@ -424,11 +424,11 @@ Private Sub LoadFilterConditions(ByRef config As tConfigSettings, ByVal ws As Wo
     currentItem = "SagyouKashoFilterList (O525:O544)"
     rawData = ReadRangeToArray(ws, "O525:O544", MODULE_NAME, funcName, currentItem)
     config.SagyouKashoFilterList = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
-    Call DebugPrintArrayState(config.SagyouKashoFilterList, currentItem)
+    Call DebugPrintArrayState(config.SagyouKashoFilterList, currentItem, config)
 
     Exit Sub
 ErrorHandler_LoadFilterConditions:
-    Call M04_LogWriter.WriteErrorLog("ERROR", MODULE_NAME, funcName, "フィルター条件「" & currentItem & "」の処理中にエラー。", Err.Number, Err.Description)
+    Call LogErrorAndSetOccurredFlag(MODULE_NAME, funcName, "フィルター条件「" & currentItem & "」読込エラー", Err.Number, Err.Description)
 End Sub
 
 Private Sub LoadTargetFileDefinition(ByRef config As tConfigSettings, ByVal ws As Worksheet)
@@ -440,18 +440,16 @@ Private Sub LoadTargetFileDefinition(ByRef config As tConfigSettings, ByVal ws A
     currentItem = "TargetFileFolderPaths (P557:P756)"
     rawData = ReadRangeToArray(ws, "P557:P756", MODULE_NAME, funcName, currentItem)
     config.TargetFileFolderPaths = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
-    Call DebugPrintArrayState(config.TargetFileFolderPaths, currentItem)
+    Call DebugPrintArrayState(config.TargetFileFolderPaths, currentItem, config)
 
     currentItem = "FilePatternIdentifiers (Q557:Q756)"
     rawData = ReadRangeToArray(ws, "Q557:Q756", MODULE_NAME, funcName, currentItem)
     config.FilePatternIdentifiers = ConvertRawVariantToStringArray(rawData, MODULE_NAME, funcName, currentItem)
-    Call DebugPrintArrayState(config.FilePatternIdentifiers, currentItem)
+    Call DebugPrintArrayState(config.FilePatternIdentifiers, currentItem, config)
 
-    ' Original validation for FilePatternIdentifiers can be removed if ConvertRawVariantToStringArray handles all cases
-    ' and ensures an initialized (1 To 0) array for problematic/empty inputs.
     Exit Sub
 ErrorHandler_LoadTargetFileDefinition:
-    Call M04_LogWriter.WriteErrorLog("ERROR", MODULE_NAME, funcName, "処理対象ファイル定義「" & currentItem & "」読込エラー", Err.Number, Err.Description)
+    Call LogErrorAndSetOccurredFlag(MODULE_NAME, funcName, "処理対象ファイル定義「" & currentItem & "」読込エラー", Err.Number, Err.Description)
 End Sub
 
 ' --- Reading Helper Functions ---
@@ -524,7 +522,7 @@ Private Function ConvertRawVariantToStringArray(ByVal rawData As Variant, ByVal 
         On Error Resume Next ' For LBound/UBound calls
         lBound1 = LBound(rawData, 1)
         uBound1 = UBound(rawData, 1)
-        If Err.Number <> 0 Then ' Failed to get even 1st dimension bounds (e.g. array not initialized properly by some other means)
+        If Err.Number <> 0 Then
             Call M04_LogWriter.WriteErrorLog("WARNING", moduleN, funcN, itemName & " - 配列境界取得失敗 (1次元目)。空として扱います。ErrNo:" & Err.Number)
             Err.Clear
             ReDim tempList(1 To 0)
@@ -532,13 +530,13 @@ Private Function ConvertRawVariantToStringArray(ByVal rawData As Variant, ByVal 
             Exit Function
         End If
 
-        lBound2 = LBound(rawData, 2) ' Attempt to get 2nd dimension
+        lBound2 = LBound(rawData, 2)
         uBound2 = UBound(rawData, 2)
-        If Err.Number <> 0 Then ' It's a 1D array
+        If Err.Number <> 0 Then
             Err.Clear
-            On Error GoTo 0 ' Restore default error handling
-            If uBound1 >= lBound1 Then ' Check if 1D array has elements
-                ReDim tempList(1 To uBound1 - lBound1 + 1) ' Target 1-based array
+            On Error GoTo 0
+            If uBound1 >= lBound1 Then
+                ReDim tempList(1 To uBound1 - lBound1 + 1)
                 count = 0
                 For i = lBound1 To uBound1
                     If Not IsEmpty(rawData(i)) And Trim(CStr(rawData(i))) <> "" Then
@@ -551,14 +549,14 @@ Private Function ConvertRawVariantToStringArray(ByVal rawData As Variant, ByVal 
                 Else
                     ReDim tempList(1 To 0)
                 End If
-            Else ' 1D Array like (1 To 0) or invalid bounds
+            Else
                 ReDim tempList(1 To 0)
             End If
-        Else ' It's a 2D array
-            On Error GoTo 0 ' Restore default error handling
-            If uBound1 >= lBound1 And uBound2 >= lBound2 Then ' Check if 2D array has elements
-                If lBound2 = 1 And uBound2 = 1 Then ' N rows x 1 column (standard vertical range)
-                    ReDim tempList(1 To uBound1 - lBound1 + 1) ' Target 1-based array
+        Else
+            On Error GoTo 0
+            If uBound1 >= lBound1 And uBound2 >= lBound2 Then
+                If lBound2 = 1 And uBound2 = 1 Then
+                    ReDim tempList(1 To uBound1 - lBound1 + 1)
                     count = 0
                     For r = lBound1 To uBound1
                         If Not IsEmpty(rawData(r, lBound2)) And Trim(CStr(rawData(r, lBound2))) <> "" Then
@@ -571,11 +569,11 @@ Private Function ConvertRawVariantToStringArray(ByVal rawData As Variant, ByVal 
                     Else
                         ReDim tempList(1 To 0)
                     End If
-                Else ' Not a single column 2D array (e.g. N x M where M > 1)
+                Else
                     Call M04_LogWriter.WriteErrorLog("WARNING", moduleN, funcN, itemName & " - 予期しない2D配列構造 (複数列)。リストは空になります。")
                     ReDim tempList(1 To 0)
                 End If
-            Else ' 2D Array with invalid bounds (e.g. uBound < lBound for a dimension)
+            Else
                 ReDim tempList(1 To 0)
             End If
         End If
@@ -583,13 +581,13 @@ Private Function ConvertRawVariantToStringArray(ByVal rawData As Variant, ByVal 
     ConvertRawVariantToStringArray = tempList
 End Function
 
-Private Sub DebugPrintArrayState(ByRef arr As Variant, ByVal arrName As String)
+Private Sub DebugPrintArrayState(ByRef arr As Variant, ByVal arrName As String, ByRef currentConfig As tConfigSettings)
     Dim l As Long, u As Long
     Dim msg As String
     If Not IsArray(arr) Then
         msg = arrName & " is not an array. TypeName: " & TypeName(arr)
-        Debug.Print msg
-        Call M04_LogWriter.WriteErrorLog("DEBUG_ARRAY", "M02_ConfigReader", "DebugPrintArrayState", msg)
+        If currentConfig.DebugDetailLevel2Enabled Then Debug.Print msg
+        Call M04_LogWriter.WriteErrorLog("DEBUG_ARRAY_STATE", "M02_ConfigReader", "DebugPrintArrayState", msg)
         Exit Sub
     End If
     On Error Resume Next
@@ -597,15 +595,15 @@ Private Sub DebugPrintArrayState(ByRef arr As Variant, ByVal arrName As String)
     u = UBound(arr)
     If Err.Number <> 0 Then
         msg = arrName & " IsArray=True, but LBound/UBound failed. Err: " & Err.Description
-        Debug.Print msg
-        Call M04_LogWriter.WriteErrorLog("DEBUG_ARRAY", "M02_ConfigReader", "DebugPrintArrayState", msg)
+        If currentConfig.DebugDetailLevel2Enabled Then Debug.Print msg
+        Call M04_LogWriter.WriteErrorLog("DEBUG_ARRAY_STATE", "M02_ConfigReader", "DebugPrintArrayState", msg)
         Err.Clear
         Exit Sub
     End If
     On Error GoTo 0
     msg = arrName & " IsArray=True, LBound=" & l & ", UBound=" & u
-    Debug.Print msg
-    Call M04_LogWriter.WriteErrorLog("DEBUG_ARRAY", "M02_ConfigReader", "DebugPrintArrayState", msg)
+    If currentConfig.DebugDetailLevel2Enabled Then Debug.Print msg
+    Call M04_LogWriter.WriteErrorLog("DEBUG_ARRAY_STATE", "M02_ConfigReader", "DebugPrintArrayState", msg)
 End Sub
 
 Public Function General_IsArrayInitialized(arr As Variant) As Boolean
@@ -614,23 +612,6 @@ Public Function General_IsArrayInitialized(arr As Variant) As Boolean
         Exit Function
     End If
 
-    ' 配列であれば、ReDimされているとみなし、初期化済みとする
-    ' LBoundやUBoundのチェックは、要素が存在するかどうかの判断であり、
-    ' 配列が「初期化されているか（DimやReDimされたか）」の判断とは異なる場合がある。
-    ' 特にユーザー定義型の配列の場合、LBound等がエラーになることがあるため、
-    ' IsArray(arr) が True であれば、ここでは初期化済みと判断する。
     General_IsArrayInitialized = True
 
-    ' もし「要素が実際に存在するか」を確認したい場合は、別途 UBound(arr) >= LBound(arr) のようなチェックを行う。
-    ' ここでは「配列として使える状態か」を返すことに注力する。
 End Function
-
-Private Sub PropagateError(ByVal moduleN As String, ByVal callerProcName As String, ByVal failedSubName As String, ByVal errNum As Long, ByVal errDesc As String)
-    ' This sub is called when a Load... sub finishes and Err.Number is not 0,
-    ' meaning an error occurred in the sub and was not handled by Resume Next or Exit Sub within it.
-    m_errorOccurred = True ' Set the module-level flag
-    Call M04_LogWriter.WriteErrorLog("ERROR", moduleN, callerProcName, failedSubName & " からエラーが伝播 (または新規発生)。", errNum, errDesc)
-    ' Do not Clear Err here, let LoadConfiguration handle it or GoTo
-End Sub
-
-[end of M02_ConfigReader.bas]
