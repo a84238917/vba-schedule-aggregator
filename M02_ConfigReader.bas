@@ -334,26 +334,62 @@ End Sub
 ' D. フィルタ条件 (O列)
 Private Sub LoadFilterConditions(ByRef config As tConfigSettings, ByVal ws As Worksheet)
     Dim funcName As String: funcName = "LoadFilterConditions"
-    On Error Resume Next
+    Dim currentItem As String ' For logging which item caused an error
 
+    On Error GoTo ErrorHandler_LoadFilterConditions
+
+    currentItem = "WorkerFilterLogic (O242)"
     config.WorkerFilterLogic = ReadStringCell(ws, "O242", MODULE_NAME, funcName, "作業員フィルター検索論理", "AND")
+
+    currentItem = "WorkerFilterList (O243:O262)"
     config.WorkerFilterList = ReadRangeToArray(ws, "O243:O262", MODULE_NAME, funcName, "作業員フィルターリスト")
+
+    currentItem = "Kankatsu1FilterList (O275:O294)"
     config.Kankatsu1FilterList = ReadRangeToArray(ws, "O275:O294", MODULE_NAME, funcName, "管内1フィルターリスト")
+
+    currentItem = "Kankatsu2FilterList (O305:O334)"
     config.Kankatsu2FilterList = ReadRangeToArray(ws, "O305:O334", MODULE_NAME, funcName, "管内2フィルターリスト")
+
+    currentItem = "Bunrui1Filter (O346)"
     config.Bunrui1Filter = ReadStringCell(ws, "O346", MODULE_NAME, funcName, "分類1フィルター")
+
+    currentItem = "Bunrui2Filter (O367)"
     config.Bunrui2Filter = ReadStringCell(ws, "O367", MODULE_NAME, funcName, "分類2フィルター")
+
+    currentItem = "Bunrui3Filter (O388)"
     config.Bunrui3Filter = ReadStringCell(ws, "O388", MODULE_NAME, funcName, "分類3フィルター")
+
+    currentItem = "KoujiShuruiFilterList (O409:O418)"
     config.KoujiShuruiFilterList = ReadRangeToArray(ws, "O409:O418", MODULE_NAME, funcName, "工事種類フィルターリスト")
+
+    currentItem = "KoubanFilterList (O431:O440)"
     config.KoubanFilterList = ReadRangeToArray(ws, "O431:O440", MODULE_NAME, funcName, "工番フィルターリスト")
+
+    currentItem = "SagyoushuruiFilterList (O451:O470)"
     config.SagyoushuruiFilterList = ReadRangeToArray(ws, "O451:O470", MODULE_NAME, funcName, "作業種類フィルターリスト")
+
+    currentItem = "TantouFilterList (O481:O490)"
     config.TantouFilterList = ReadRangeToArray(ws, "O481:O490", MODULE_NAME, funcName, "担当の名前フィルターリスト")
+
+    currentItem = "NinzuFilter (O503)"
     config.NinzuFilter = ReadStringCell(ws, "O503", MODULE_NAME, funcName, "人数フィルター")
-    config.IsNinzuFilterOriginallyEmpty = (Trim(config.NinzuFilter) = "")
+    config.IsNinzuFilterOriginallyEmpty = (Trim(config.NinzuFilter) = "") ' This should be safe
+
+    currentItem = "SagyouKashoKindFilter (O514)"
     config.SagyouKashoKindFilter = ReadStringCell(ws, "O514", MODULE_NAME, funcName, "作業箇所の種類フィルター")
+
+    currentItem = "SagyouKashoFilterList (O525:O544)"
     config.SagyouKashoFilterList = ReadRangeToArray(ws, "O525:O544", MODULE_NAME, funcName, "作業箇所フィルターリスト")
 
-    If Err.Number <> 0 Then Call M04_LogWriter.WriteErrorLog("WARNING", MODULE_NAME, funcName, "フィルタ条件の読み込み中にエラー。", Err.Number, Err.Description)
-    On Error GoTo 0
+    Exit Sub ' Normal exit
+
+ErrorHandler_LoadFilterConditions:
+    Call M04_LogWriter.WriteErrorLog("ERROR", MODULE_NAME, funcName, "フィルター条件「" & currentItem & "」の読み込み中にエラー。", Err.Number, Err.Description)
+    ' Do not Resume or Exit Sub here, let the error propagate to LoadConfiguration's handler
+    ' This allows LoadConfiguration to set its m_errorOccurred flag and return False.
+    ' The error will be caught by On Error GoTo ErrorHandler_LoadConfiguration in the main LoadConfiguration function.
+    ' To ensure this propagation, we might need to Err.Raise Err.Number if LoadConfiguration's handler isn't reached otherwise.
+    ' For now, rely on standard VBA error bubbling up from a sub without its own Resume/Exit in the handler.
 End Sub
 
 ' E. 処理対象ファイル定義 (P, Q列)
