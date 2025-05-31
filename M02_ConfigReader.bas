@@ -359,10 +359,32 @@ End Sub
 ' E. 処理対象ファイル定義 (P, Q列)
 Private Sub LoadTargetFileDefinition(ByRef config As tConfigSettings, ByVal ws As Worksheet)
     Dim funcName As String: funcName = "LoadTargetFileDefinition"
-    On Error Resume Next
+    On Error Resume Next ' Keep this for the overall sub, individual reads have their own handling
 
     config.TargetFileFolderPaths = ReadRangeToArray(ws, "P557:P756", MODULE_NAME, funcName, "処理対象ファイル/フォルダパスリスト")
     config.FilePatternIdentifiers = ReadRangeToArray(ws, "Q557:Q756", MODULE_NAME, funcName, "各処理対象ファイル適用工程パターン識別子")
+
+    ' Validate FilePatternIdentifiers
+    Dim isValidArray As Boolean
+    isValidArray = False
+    If IsArray(config.FilePatternIdentifiers) Then
+        On Error Resume Next ' Check LBound/UBound safely
+        Dim l As Long, u As Long
+        l = LBound(config.FilePatternIdentifiers)
+        u = UBound(config.FilePatternIdentifiers)
+        If Err.Number = 0 Then
+            isValidArray = True ' LBound/UBound succeeded, it's a proper array
+        Else
+            Err.Clear
+        End If
+        On Error GoTo 0
+    End If
+
+    If Not isValidArray Then
+        Call M04_LogWriter.WriteErrorLog("WARNING", MODULE_NAME, funcName, "FilePatternIdentifiers (Q557:Q756) が有効な配列として読み込めませんでした。空の配列として初期化します。")
+        ReDim config.FilePatternIdentifiers(1 To 0)
+    End If
+    ' A similar check could be added for TargetFileFolderPaths if deemed necessary
 
     If Err.Number <> 0 Then Call M04_LogWriter.WriteErrorLog("WARNING", MODULE_NAME, funcName, "処理対象ファイル定義の読み込み中にエラー。", Err.Number, Err.Description)
     On Error GoTo 0
@@ -424,29 +446,36 @@ End Function
 Private Function ReadRangeToArray(ws As Worksheet, rangeAddress As String, moduleN As String, funcN As String, itemName As String) As String()
     Dim data As Variant, result() As String, arrRead_i As Long, nonEmptyCount As Long
     On Error Resume Next
-    data = ws.Range(rangeAddress).Value
+    data = ws.Range(rangeAddress).value
     If Err.Number <> 0 Then
         Call M04_LogWriter.WriteErrorLog("WARNING", moduleN, funcN, itemName & " (" & rangeAddress & ") 範囲読み取り失敗。", Err.Number, Err.Description)
+        ReDim result(1 To 0) ' Return initialized empty array on range read error
+        ReadRangeToArray = result
         Exit Function
     End If
     On Error GoTo 0
 
     If IsArray(data) Then
+        ' Existing logic for array data
         ReDim result(1 To UBound(data, 1))
         For arrRead_i = 1 To UBound(data, 1)
             If Not IsEmpty(data(arrRead_i, 1)) And Trim(CStr(data(arrRead_i, 1))) <> "" Then
                 result(arrRead_i) = Trim(CStr(data(arrRead_i, 1)))
                 nonEmptyCount = nonEmptyCount + 1
             Else
-                result(arrRead_i) = vbNullString
+                result(arrRead_i) = vbNullString ' Store as empty string for consistency
             End If
         Next arrRead_i
         If nonEmptyCount = 0 Then
-            ReDim result(1 To 0) ' Ensure array is initialized even if empty
+            ReDim result(1 To 0) ' All elements were empty or array was empty, return (1 To 0)
         End If
     Else
+        ' Data is not an array (e.g., single cell, possibly empty)
         If Not IsEmpty(data) And Trim(CStr(data)) <> "" Then
-            ReDim result(1 To 1): result(1) = Trim(CStr(data))
+            ReDim result(1 To 1)
+            result(1) = Trim(CStr(data))
+        Else
+            ReDim result(1 To 0) ' Single cell empty or IsEmpty, return (1 To 0)
         End If
     End If
     ReadRangeToArray = result

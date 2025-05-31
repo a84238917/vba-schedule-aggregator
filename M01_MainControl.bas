@@ -96,14 +96,30 @@ Public Sub ExtractDataMain()
         targetPath = Trim(g_configSettings.TargetFileFolderPaths(k))
         Call M04_LogWriter.WriteErrorLog("DEBUG_POINT", "MainControl", "ExtractDataMain", "targetPath = " & targetPath)
 
-
-        If General_IsArrayInitialized(g_configSettings.FilePatternIdentifiers) And _
-           k >= LBound(g_configSettings.FilePatternIdentifiers) And _
-           k <= UBound(g_configSettings.FilePatternIdentifiers) Then
-            targetPattern = Trim(g_configSettings.FilePatternIdentifiers(k))
+        targetPattern = "" ' Default to empty
+        If General_IsArrayInitialized(g_configSettings.FilePatternIdentifiers) Then
+            ' Check if k is within the actual bounds of the array if it has elements
+            Dim l_fp As Long, u_fp As Long
+            On Error Resume Next ' In case LBound/UBound fail for an unusual "initialized" array
+            l_fp = LBound(g_configSettings.FilePatternIdentifiers)
+            u_fp = UBound(g_configSettings.FilePatternIdentifiers)
+            If Err.Number = 0 Then ' LBound/UBound succeeded
+                If k >= l_fp And k <= u_fp Then
+                    targetPattern = Trim(g_configSettings.FilePatternIdentifiers(k))
+                Else
+                    ' k is outside the valid range, even if array exists. Log if necessary.
+                    ' This case might imply TargetFileFolderPaths and FilePatternIdentifiers have different lengths.
+                    Call M04_LogWriter.WriteErrorLog("WARNING", "MainControl", "ExtractDataMain", "FilePatternIdentifiers のインデックスk=" & k & "が範囲外 (L:" & l_fp & ", U:" & u_fp & ")。空パターン使用。")
+                End If
+            Else
+                ' LBound/UBound failed, array might be (1 To 0) or malformed despite General_IsArrayInitialized
+                Call M04_LogWriter.WriteErrorLog("WARNING", "MainControl", "ExtractDataMain", "FilePatternIdentifiers の LBound/UBound 取得失敗。インデックスk=" & k & "。空パターン使用。")
+                Err.Clear
+            End If
+            On Error GoTo ErrorHandler_ExtractDataMain ' Restore error handler
         Else
-            targetPattern = ""
-            Call M04_LogWriter.WriteErrorLog("WARNING", "MainControl", "ExtractDataMain", "工程パターン識別子リスト(FilePatternIdentifiers)のインデックス" & k & "に対応する値なし。")
+            ' FilePatternIdentifiers is not even an array
+            Call M04_LogWriter.WriteErrorLog("WARNING", "MainControl", "ExtractDataMain", "FilePatternIdentifiers 配列が未初期化。インデックスk=" & k & "。空パターン使用。")
         End If
         Call M04_LogWriter.WriteErrorLog("DEBUG_POINT", "MainControl", "ExtractDataMain", "targetPattern = " & targetPattern)
         g_configSettings.CurrentPatternIdentifier = targetPattern

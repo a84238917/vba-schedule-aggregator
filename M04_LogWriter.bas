@@ -78,41 +78,55 @@ Public Sub WriteFilterLog(ByRef config As tConfigSettings, ByVal wb As Workbook)
     If nextLogWriteRow <= 0 Then nextLogWriteRow = 1
 
     Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "--- D. フィルター条件 ---", "開始")
-    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "D.作業員フィルター検索論理", config.WorkerFilterLogic)
+
+    If Trim(config.WorkerFilterLogic) <> "" And UCase(Trim(config.WorkerFilterLogic)) <> "AND" Then ' Log if not default "AND" or if explicitly set
+        Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "D.作業員フィルター検索論理", config.WorkerFilterLogic)
+    End If
+
     If General_IsArrayInitialized(config.WorkerFilterList) Then
-        Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "D.作業員フィルターリスト", config.WorkerFilterList)
+        Call WriteFilterLogArrayEntryIfSet(wsLog, nextLogWriteRow, "D.作業員フィルターリスト", config.WorkerFilterList)
     End If
     If General_IsArrayInitialized(config.Kankatsu1FilterList) Then
-        Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "D.管内1フィルターリスト", config.Kankatsu1FilterList)
+        Call WriteFilterLogArrayEntryIfSet(wsLog, nextLogWriteRow, "D.管内1フィルターリスト", config.Kankatsu1FilterList)
     End If
     If General_IsArrayInitialized(config.Kankatsu2FilterList) Then
-        Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "D.管内2フィルターリスト", config.Kankatsu2FilterList)
+        Call WriteFilterLogArrayEntryIfSet(wsLog, nextLogWriteRow, "D.管内2フィルターリスト", config.Kankatsu2FilterList)
     End If
-    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "D.分類1フィルター", config.Bunrui1Filter)
-    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "D.分類2フィルター", config.Bunrui2Filter)
-    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "D.分類3フィルター", config.Bunrui3Filter)
+    If Trim(config.Bunrui1Filter) <> "" Then
+        Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "D.分類1フィルター", config.Bunrui1Filter)
+    End If
+    If Trim(config.Bunrui2Filter) <> "" Then
+        Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "D.分類2フィルター", config.Bunrui2Filter)
+    End If
+    If Trim(config.Bunrui3Filter) <> "" Then
+        Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "D.分類3フィルター", config.Bunrui3Filter)
+    End If
     If General_IsArrayInitialized(config.KoujiShuruiFilterList) Then
-        Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "D.工事種類フィルターリスト", config.KoujiShuruiFilterList)
+        Call WriteFilterLogArrayEntryIfSet(wsLog, nextLogWriteRow, "D.工事種類フィルターリスト", config.KoujiShuruiFilterList)
     End If
     If General_IsArrayInitialized(config.KoubanFilterList) Then
-        Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "D.工番フィルターリスト", config.KoubanFilterList)
+        Call WriteFilterLogArrayEntryIfSet(wsLog, nextLogWriteRow, "D.工番フィルターリスト", config.KoubanFilterList)
     End If
     If General_IsArrayInitialized(config.SagyoushuruiFilterList) Then
-        Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "D.作業種類フィルターリスト", config.SagyoushuruiFilterList)
+        Call WriteFilterLogArrayEntryIfSet(wsLog, nextLogWriteRow, "D.作業種類フィルターリスト", config.SagyoushuruiFilterList)
     End If
     If General_IsArrayInitialized(config.TantouFilterList) Then
-        Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "D.担当の名前フィルターリスト", config.TantouFilterList)
+        Call WriteFilterLogArrayEntryIfSet(wsLog, nextLogWriteRow, "D.担当の名前フィルターリスト", config.TantouFilterList)
     End If
-    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "D.人数フィルター", config.NinzuFilter & IIf(config.IsNinzuFilterOriginallyEmpty, " (元々空)", ""))
-    Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "D.作業箇所の種類フィルター", config.SagyouKashoKindFilter)
+    If Not config.IsNinzuFilterOriginallyEmpty Then ' Log if it was not originally empty (i.e. user set something, even if it's "0")
+        Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "D.人数フィルター", config.NinzuFilter)
+    End If
+    If Trim(config.SagyouKashoKindFilter) <> "" Then
+        Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "D.作業箇所の種類フィルター", config.SagyouKashoKindFilter)
+    End If
     If General_IsArrayInitialized(config.SagyouKashoFilterList) Then
-        Call WriteFilterLogArrayEntry(wsLog, nextLogWriteRow, "D.作業箇所フィルターリスト", config.SagyouKashoFilterList)
+        Call WriteFilterLogArrayEntryIfSet(wsLog, nextLogWriteRow, "D.作業箇所フィルターリスト", config.SagyouKashoFilterList)
     End If
     Call WriteFilterLogEntry(wsLog, nextLogWriteRow, "--- D. フィルター条件 ---", "終了")
 
     Call WriteErrorLog("INFORMATION", MODULE_NAME, funcName, "フィルター条件ログの書き込みが完了しました。")
     Exit Sub
-ErrorHandler_WriteFilterLog:
+ErrorHandler_WriteFilterLog: ' Ensure this label exists
     Call WriteErrorLog("ERROR", MODULE_NAME, funcName, "フィルター条件ログ書き込み中にエラー。", Err.Number, Err.Description)
 End Sub
 
@@ -240,6 +254,33 @@ Private Sub WriteFilterLogArrayEntry(ByVal ws As Worksheet, ByRef nextRow As Lon
         If Trim(arr(i)) <> "" Then
             ' 配列の各要素を個別の行として記録。項目名は同じitemBaseNameを使う。
              Call WriteFilterLogEntry(ws, nextRow, itemBaseName, arr(i))
+        End If
+    Next i
+End Sub
+
+Private Sub WriteFilterLogArrayEntryIfSet(ByVal ws As Worksheet, ByRef nextRow As Long, ByVal itemBaseName As String, ByRef arr() As String)
+    Dim i As Long
+    Dim hasActualValue As Boolean
+    hasActualValue = False
+
+    If Not General_IsArrayInitialized(arr) Then Exit Sub
+
+    ' Check if there's any non-empty value in the array first
+    For i = LBound(arr) To UBound(arr)
+        If Trim(arr(i)) <> "" Then
+            hasActualValue = True
+            Exit For
+        End If
+    Next i
+
+    If Not hasActualValue Then Exit Sub ' No actual values to log
+
+    ' Log the base name once if there are values
+    ' Call WriteFilterLogEntry(ws, nextRow, itemBaseName, "(以下リスト)") ' Optional: indicate list follows
+
+    For i = LBound(arr) To UBound(arr)
+        If Trim(arr(i)) <> "" Then
+             Call WriteFilterLogEntry(ws, nextRow, itemBaseName & " (" & i & ")", arr(i)) ' Log with index
         End If
     Next i
 End Sub
