@@ -163,7 +163,39 @@ Public Function ExtractDataFromFile(kouteiFilePath As String, ByRef config As tC
         GoTo ExtractDataFromFile_Finally
     End If
     outputActualHeaderNames = Split(config.OutputHeaderContents(config.OutputHeaderRowCount), vbTab) ' 0-based array
-    If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: Output headers for mapping (last row of config headers): " & Join(outputActualHeaderNames, "|")
+
+    If config.TraceDebugEnabled Then
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: M06_DataExtractor.ExtractDataFromFile - Parsed OutputActualHeaderNames from config.OutputHeaderContents(" & config.OutputHeaderRowCount & "):"
+        Dim tempHeadIdx_M06_Debug As Long ' Use a unique variable name for the loop counter
+
+        ' Robust check for array state after Split
+        Dim lBoundVal As Long, uBoundVal As Long
+        Dim arrayIsValidForLoop As Boolean
+        arrayIsValidForLoop = False
+        On Error Resume Next ' Handle UBound on uninitialized array, though Split should always return an array
+        lBoundVal = LBound(outputActualHeaderNames)
+        uBoundVal = UBound(outputActualHeaderNames)
+        If Err.Number = 0 Then ' Successfully got bounds
+            On Error GoTo ExtractDataFromFile_Error ' Restore main error handler if it was active
+            arrayIsValidForLoop = (uBoundVal >= lBoundVal)
+        Else ' Failed to get bounds, array likely not what we expect
+            On Error GoTo ExtractDataFromFile_Error ' Restore main error handler
+            Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE:   outputActualHeaderNames is not a valid/initialized array after Split (Error getting bounds)."
+            Err.Clear
+        End If
+
+        If arrayIsValidForLoop Then
+            For tempHeadIdx_M06_Debug = lBoundVal To uBoundVal
+                Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE:   Header Index " & tempHeadIdx_M06_Debug & " (" & lBoundVal & "-" & uBoundVal & "): [" & outputActualHeaderNames(tempHeadIdx_M06_Debug) & "]"
+            Next tempHeadIdx_M06_Debug
+        Else
+            Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE:   outputActualHeaderNames array is empty or invalid after Split (LBound > UBound or error getting bounds)."
+        End If
+        Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: --- End Parsed OutputActualHeaderNames ---"
+    End If
+    ' The original simple Join print is now covered by the loop above if TraceDebugEnabled.
+    ' If config.TraceDebugEnabled Then Debug.Print Format(Now, "yyyy/mm/dd hh:nn:ss") & " - DEBUG_TRACE: Output headers for mapping (last row of config headers): " & Join(outputActualHeaderNames, "|")
+
 
     Set workerHeaderMap = CreateObject("Scripting.Dictionary")
     workerHeaderSequence = 0
