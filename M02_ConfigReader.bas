@@ -1,4 +1,4 @@
-' バージョン：v0.5.1
+' バージョン：v0.5.2
 Option Explicit
 ' このモジュールは、設定シートから情報を読み取り、g_configSettings グローバル変数を設定する役割を担います。
 ' 主に LoadConfiguration 関数を通じて、M00_GlobalDeclarationsで定義された tConfigSettings 型の変数に値を設定します。
